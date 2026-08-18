@@ -1,0 +1,216 @@
+name: CD
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    branches:
+      - main
+    types:
+      - completed
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-fargateflow-production
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  AWS_ACCOUNT_ID: '761018861028'
+  AWS_ROLE_ARN: arn:aws:iam::761018861028:role/github-actions-deploy-role
+  ECR_REPOSITORY: fargateflow
+  ECS_CLUSTER: fargateflow-cluster
+  ECS_SERVICE: fargateflow-service
+  ECS_TASK_DEFINITION_FAMILY: fargateflow
+  ECS_CONTAINER_NAME: fargateflow-api
+  ALB_NAME: fargateflow-alb
+
+jobs:
+  deploy:
+    name: Deploy to Amazon ECS
+    if: >-
+      (github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success') ||
+      (github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout validated commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          role-session-name: github-actions-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: ${{ env.AWS_ACCOUNT_ID }}
+          role-duration-seconds: 3600
+          mask-aws-account-id: true
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@d539f0932e70871a027e9d5a9d8fc38589180a64 # v2.1.6
+
+      - name: Define image tag
+        id: image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          COMMIT_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          set -euo pipefail
+
+          image_uri="${ECR_REGISTRY}/${ECR_REPOSITORY}:${COMMIT_SHA}"
+          echo "tag=${COMMIT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "uri=${image_uri}" >> "$GITHUB_OUTPUT"
+
+          if aws ecr describe-images \
+            --repository-name "$ECR_REPOSITORY" \
+            --image-ids imageTag="$COMMIT_SHA" \
+            > /dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up QEMU
+        if: steps.image.outputs.exists != 'true'
+        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
+        with:
+          platforms: arm64
+
+      - name: Set up Docker Buildx
+        if: steps.image.outputs.exists != 'true'
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+
+      - name: Build and push ARM64 image
+        if: steps.image.outputs.exists != 'true'
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          platforms: linux/arm64
+          push: true
+          pull: true
+          tags: ${{ steps.image.outputs.uri }}
+          build-args: NODE_VERSION=24
+          cache-from: type=gha,scope=fargateflow-arm64
+          cache-to: type=gha,mode=max,scope=fargateflow-arm64
+          provenance: false
+          sbom: false
+
+      - name: Validate ECR vulnerability scan
+        env:
+          IMAGE_TAG: ${{ steps.image.outputs.tag }}
+        run: |
+          set -euo pipefail
+
+          aws ecr wait image-scan-complete \
+            --repository-name "$ECR_REPOSITORY" \
+            --image-id imageTag="$IMAGE_TAG"
+
+          scan_result="$(aws ecr describe-image-scan-findings \
+            --repository-name "$ECR_REPOSITORY" \
+            --image-id imageTag="$IMAGE_TAG")"
+
+          critical="$(jq -r '.imageScanFindings.findingSeverityCounts.CRITICAL // 0' <<< "$scan_result")"
+          high="$(jq -r '.imageScanFindings.findingSeverityCounts.HIGH // 0' <<< "$scan_result")"
+
+          echo "ECR scan findings: CRITICAL=${critical}, HIGH=${high}"
+
+          if (( critical > 0 || high > 0 )); then
+            echo "Deployment blocked by ECR vulnerability findings."
+            exit 1
+          fi
+
+      - name: Resolve immutable image digest
+        id: image-digest
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ steps.image.outputs.tag }}
+        run: |
+          set -euo pipefail
+
+          digest="$(aws ecr describe-images \
+            --repository-name "$ECR_REPOSITORY" \
+            --image-ids imageTag="$IMAGE_TAG" \
+            --query 'imageDetails[0].imageDigest' \
+            --output text)"
+
+          test -n "$digest"
+          test "$digest" != "None"
+
+          echo "uri=${ECR_REGISTRY}/${ECR_REPOSITORY}@${digest}" >> "$GITHUB_OUTPUT"
+
+      - name: Render Amazon ECS task definition
+        id: render-task-definition
+        uses: aws-actions/amazon-ecs-render-task-definition@138c24f321fdbdf7edee4a685519d253cae2cdea # v1.9.0
+        with:
+          task-definition-family: ${{ env.ECS_TASK_DEFINITION_FAMILY }}
+          container-name: ${{ env.ECS_CONTAINER_NAME }}
+          image: ${{ steps.image-digest.outputs.uri }}
+
+      - name: Deploy Amazon ECS task definition
+        id: deploy
+        uses: aws-actions/amazon-ecs-deploy-task-definition@c465972ecbd160473f22e683363b422a5412a3de # v2.6.3
+        with:
+          task-definition: ${{ steps.render-task-definition.outputs.task-definition }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          service: ${{ env.ECS_SERVICE }}
+          wait-for-service-stability: true
+          wait-for-minutes: 15
+          wait-max-delay-seconds: 15
+          enable-ecs-managed-tags: true
+          propagate-tags: SERVICE
+
+      - name: Tag registered task definition
+        if: always() && steps.deploy.outputs.task-definition-arn != ''
+        env:
+          TASK_DEFINITION_ARN: ${{ steps.deploy.outputs.task-definition-arn }}
+        run: |
+          aws ecs tag-resource \
+            --resource-arn "$TASK_DEFINITION_ARN" \
+            --tags \
+              key=Project,value=aws-fargate-infrastructure-lab \
+              key=Environment,value=study \
+              key=ManagedBy,value=manual \
+              key=Owner,value=kaio
+
+      - name: Smoke test public health endpoint
+        run: |
+          set -euo pipefail
+
+          alb_dns="$(aws elbv2 describe-load-balancers \
+            --names "$ALB_NAME" \
+            --query 'LoadBalancers[0].DNSName' \
+            --output text)"
+
+          response="$(curl \
+            --fail \
+            --silent \
+            --show-error \
+            --retry 12 \
+            --retry-all-errors \
+            --retry-delay 5 \
+            "http://${alb_dns}/health")"
+
+          jq -e '.status == "ok"' <<< "$response"
+
+      - name: Write deployment summary
+        run: |
+          {
+            echo "### Amazon ECS deployment"
+            echo
+            echo "- Commit: \`${{ steps.image.outputs.tag }}\`"
+            echo "- Image: \`${{ steps.image-digest.outputs.uri }}\`"
+            echo "- Task definition: \`${{ steps.deploy.outputs.task-definition-arn }}\`"
+            echo "- Service: \`${ECS_CLUSTER}/${ECS_SERVICE}\`"
+            echo "- Health check: passed"
+          } >> "$GITHUB_STEP_SUMMARY"
