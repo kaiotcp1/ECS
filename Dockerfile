@@ -5,6 +5,14 @@
 # com `docker build --build-arg NODE_VERSION=...`, sem editar o Dockerfile.
 ARG NODE_VERSION=24
 
+# Usa a variante Alpine em todos os estagios para manter o ambiente consistente.
+# Ela possui menos pacotes do sistema operacional do que uma imagem Debian Slim,
+# o que reduz o tamanho da imagem e a quantidade de componentes analisados pelo ECR.
+#
+# Alpine usa musl libc em vez de glibc. Por isso, dependencias de producao tambem
+# sao instaladas em um estagio Alpine, evitando copiar modulos nativos compilados
+# para uma distribuicao Linux diferente para dentro da imagem final.
+
 # Estagio 1: instala todas as dependencias do projeto.
 # O `npm ci` usa o package-lock.json como fonte da verdade e falha se ele estiver
 # inconsistente com o package.json. Isso torna o build mais reproduzivel do que
@@ -12,7 +20,7 @@ ARG NODE_VERSION=24
 #
 # Aqui instalamos tambem as devDependencies porque o build TypeScript depende de
 # ferramentas como `typescript`. Essas dependencias nao entram diretamente na imagem final.
-FROM node:${NODE_VERSION}-bookworm-slim AS dependencies
+FROM node:${NODE_VERSION}-alpine AS dependencies
 WORKDIR /app
 
 COPY package.json package-lock.json ./
@@ -40,7 +48,7 @@ RUN npm run build
 #
 # Isso reduz o tamanho da imagem final e diminui a superficie de ataque, porque menos
 # pacotes e ferramentas ficam disponiveis dentro do container em execucao.
-FROM node:${NODE_VERSION}-bookworm-slim AS production-dependencies
+FROM node:${NODE_VERSION}-alpine AS production-dependencies
 WORKDIR /app
 
 ENV NODE_ENV=production
@@ -56,7 +64,7 @@ RUN npm ci --omit=dev
 #
 # O codigo TypeScript original, testes, configs de lint e dependencias de desenvolvimento
 # nao precisam existir no container final.
-FROM node:${NODE_VERSION}-bookworm-slim AS runtime
+FROM node:${NODE_VERSION}-alpine AS runtime
 WORKDIR /app
 
 # Define valores padrao para execucao em container.
