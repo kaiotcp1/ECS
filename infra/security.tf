@@ -1,10 +1,10 @@
 resource "aws_security_group" "alb" {
-  name        = "${var.name_prefix}-alb-sg"
+  name        = local.names.alb_security_group
   description = "Allows public HTTP traffic to the FargateFlow ALB"
   vpc_id      = aws_vpc.main.id
 
   tags = {
-    Name = "${var.name_prefix}-alb-sg"
+    Name = local.names.alb_security_group
   }
 }
 
@@ -18,12 +18,12 @@ resource "aws_vpc_security_group_ingress_rule" "alb_http" {
 }
 
 resource "aws_security_group" "ecs_tasks" {
-  name        = "${var.name_prefix}-ecs-tasks-sg"
+  name        = local.names.tasks_security_group
   description = "Allows application traffic only from the FargateFlow ALB"
   vpc_id      = aws_vpc.main.id
 
   tags = {
-    Name = "${var.name_prefix}-ecs-tasks-sg"
+    Name = local.names.tasks_security_group
   }
 }
 

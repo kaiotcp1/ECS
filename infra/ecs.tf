@@ -1,11 +1,11 @@
 resource "aws_cloudwatch_log_group" "app" {
-  name              = "/ecs/${var.name_prefix}"
+  name              = local.names.log_group
   retention_in_days = 3
   log_group_class   = "STANDARD"
 }
 
 resource "aws_ecs_cluster" "app" {
-  name = "${var.name_prefix}-cluster"
+  name = local.names.cluster
 
   setting {
     name  = "containerInsights"
@@ -46,7 +46,7 @@ resource "aws_ecs_task_definition" "app" {
   }
 
   container_definitions = jsonencode([{
-    name      = "${var.name_prefix}-api"
+    name      = local.names.container
     image     = "${aws_ecr_repository.app.repository_url}:bootstrap"
     essential = true
 
@@ -91,7 +91,7 @@ resource "aws_ecs_task_definition" "app" {
 }
 
 resource "aws_ecs_service" "app" {
-  name            = "${var.name_prefix}-service"
+  name            = local.names.service
   cluster         = aws_ecs_cluster.app.id
   task_definition = aws_ecs_task_definition.app.arn
   desired_count   = var.desired_count
@@ -123,7 +123,7 @@ resource "aws_ecs_service" "app" {
 
   load_balancer {
     target_group_arn = aws_lb_target_group.app.arn
-    container_name   = "${var.name_prefix}-api"
+    container_name   = local.names.container
     container_port   = 3000
   }
 

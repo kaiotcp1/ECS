@@ -30,7 +30,7 @@ resource "aws_vpc" "main" {
   enable_dns_hostnames = true
 
   tags = {
-    Name = "${var.name_prefix}-vpc"
+    Name = local.names.vpc
   }
 }
 
@@ -38,7 +38,7 @@ resource "aws_default_route_table" "main" {
   default_route_table_id = aws_vpc.main.default_route_table_id
 
   tags = {
-    Name = "${var.name_prefix}-main-rt"
+    Name = local.names.main_route_table
   }
 }
 
@@ -46,7 +46,7 @@ resource "aws_internet_gateway" "main" {
   vpc_id = aws_vpc.main.id
 
   tags = {
-    Name = "${var.name_prefix}-igw"
+    Name = local.names.internet_gateway
   }
 }
 
@@ -82,7 +82,7 @@ resource "aws_route_table" "public" {
   vpc_id = aws_vpc.main.id
 
   tags = {
-    Name = "${var.name_prefix}-public-rt"
+    Name = local.names.public_route_table
   }
 }
 
@@ -109,7 +109,7 @@ resource "aws_nat_gateway" "main" {
   depends_on = [aws_internet_gateway.main]
 
   tags = {
-    Name = "${var.name_prefix}-nat-regional"
+    Name = local.names.nat_gateway
   }
 }
 

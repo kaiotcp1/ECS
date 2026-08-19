@@ -6,13 +6,13 @@ locals {
 }
 
 resource "aws_iam_role" "ecs_task" {
-  name               = "${var.name_prefix}-ecs-task-role"
+  name               = local.names.task_role
   description        = "Provides AWS permissions to the FargateFlow application"
   assume_role_policy = local.ecs_tasks_assume_role_policy
 }
 
 resource "aws_iam_role" "ecs_task_execution" {
-  name               = "${var.name_prefix}-ecs-task-execution-role"
+  name               = local.names.task_execution_role
   description        = "Allows ECS to pull images from ECR and send logs to CloudWatch"
   assume_role_policy = local.ecs_tasks_assume_role_policy
 }

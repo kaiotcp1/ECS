@@ -1,5 +1,5 @@
 resource "aws_lb" "app" {
-  name               = "${var.name_prefix}-alb"
+  name               = local.names.load_balancer
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb.id]
@@ -9,12 +9,12 @@ resource "aws_lb" "app" {
   drop_invalid_header_fields = true
 
   tags = {
-    Name = "${var.name_prefix}-alb"
+    Name = local.names.load_balancer
   }
 }
 
 resource "aws_lb_target_group" "app" {
-  name        = "${var.name_prefix}-tg"
+  name        = local.names.target_group
   port        = 3000
   protocol    = "HTTP"
   target_type = "ip"
@@ -35,7 +35,7 @@ resource "aws_lb_target_group" "app" {
   }
 
   tags = {
-    Name = "${var.name_prefix}-tg"
+    Name = local.names.target_group
   }
 }
 
