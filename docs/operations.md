@@ -8,7 +8,7 @@ Antes do primeiro provisionamento, a conta precisa ter:
 
 - bucket `terraform-states-761018861028-us-east-1`;
 - provedor IAM OIDC do GitHub;
-- role compartilhada `github-actions-deploy-role` com a policy de identidade;
+- role compartilhada `github-actions-deploy-role` com permissoes de Terraform e deploy;
 - AWS CLI autenticada na conta e regiao corretas para operacao local.
 
 Esses recursos sao reutilizados por outros projetos e nao pertencem ao state do

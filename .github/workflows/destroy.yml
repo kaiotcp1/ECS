@@ -20,7 +20,7 @@ concurrency:
 env:
   AWS_REGION: us-east-1
   AWS_ACCOUNT_ID: '761018861028'
-  TERRAFORM_ROLE_ARN: arn:aws:iam::761018861028:role/fargateflow-terraform-role
+  AWS_ROLE_ARN: arn:aws:iam::761018861028:role/github-actions-deploy-role
   TF_IN_AUTOMATION: 'true'
 
 jobs:
@@ -87,7 +87,7 @@ jobs:
       - name: Configure Terraform AWS credentials
         uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
         with:
-          role-to-assume: ${{ env.TERRAFORM_ROLE_ARN }}
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
           role-session-name: terraform-destroy-${{ github.run_id }}
           aws-region: ${{ env.AWS_REGION }}
           allowed-account-ids: ${{ env.AWS_ACCOUNT_ID }}
@@ -112,5 +112,5 @@ jobs:
             echo "### Terraform runtime destroy"
             echo
             echo "The resources managed by fargateflow/study/terraform.tfstate were destroyed."
-            echo "The shared state bucket, GitHub OIDC provider, and application CI/CD roles were preserved."
+            echo "The shared state bucket, GitHub OIDC provider, and shared CI/CD role were preserved."
           } >> "$GITHUB_STEP_SUMMARY"

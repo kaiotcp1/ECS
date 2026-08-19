@@ -61,25 +61,23 @@ flowchart TB
 
   subgraph actions[GitHub Actions]
     ci[CI<br/>format + lint + test + build]
-    identity[Ensure identity<br/>roles e policies]
     tf[Terraform<br/>validate + plan + apply condicional]
     destroy[Destroy runtime<br/>destroy condicional]
     cd[CD<br/>build ARM64 + scan + deploy + smoke test]
   end
 
   github --> ci
-  ci -->|sucesso na main| identity --> tf
+  ci -->|sucesso na main| tf
   tf --> destroy
   tf --> cd
 
-  identity -->|OIDC / STS| bootstrap[IAM role compartilhada]
-  tf -->|OIDC / STS| terraformRole[fargateflow-terraform-role]
-  destroy -->|OIDC / STS| terraformRole
-  cd -->|OIDC / STS| deployRole[fargateflow-deploy-role]
+  tf -->|OIDC / STS| sharedRole[github-actions-deploy-role]
+  destroy -->|OIDC / STS| sharedRole
+  cd -->|OIDC / STS| sharedRole
   tf --> state[(S3 Terraform states<br/>state + lockfile)]
-  deployRole --> ecr[Amazon ECR]
-  deployRole --> ecs[Amazon ECS]
-  terraformRole --> aws[AWS APIs]
+  sharedRole --> ecr[Amazon ECR]
+  sharedRole --> ecs[Amazon ECS]
+  sharedRole --> aws[AWS APIs]
   cd -->|GET /health| alb[ALB publico]
 ```
 

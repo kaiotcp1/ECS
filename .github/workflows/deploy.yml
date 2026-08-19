@@ -22,7 +22,7 @@ env:
   AWS_REGION: us-east-1
   AWS_ACCOUNT_ID: '761018861028'
   DOCKER_BUILD_RECORD_UPLOAD: 'false'
-  AWS_ROLE_ARN: arn:aws:iam::761018861028:role/fargateflow-deploy-role
+  AWS_ROLE_ARN: arn:aws:iam::761018861028:role/github-actions-deploy-role
   ECR_REPOSITORY: fargateflow
   ECS_CLUSTER: fargateflow-cluster
   ECS_SERVICE: fargateflow-service
@@ -67,8 +67,6 @@ jobs:
     needs: read-lifecycle-gates
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    environment: production
-
     steps:
       - name: Checkout validated commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

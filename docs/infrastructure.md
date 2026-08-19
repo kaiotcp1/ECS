@@ -1,8 +1,8 @@
 # Infraestrutura Terraform
 
-O diretorio `infra/` contem duas raizes Terraform com ownership distinto. A identidade
-permanece para permitir novas execucoes da pipeline; o runtime e efemero e pode ser
-destruido ao fim do laboratorio.
+O diretorio `infra/` contem o runtime efemero do laboratorio, que pode ser destruido
+ao fim do estudo. A identidade OIDC e o backend S3 sao recursos compartilhados da
+conta e ficam fora deste state.
 
 ## Inventario
 
@@ -14,9 +14,9 @@ destruido ao fim do laboratorio.
 | `ecr.tf`       | Artefatos de container | Repositorio, scan e lifecycle policy                   |
 | `iam.tf`       | Identidades de runtime | Task role e task execution role                        |
 | `ecs.tf`       | Computacao e logs      | Cluster, task definition, service e CloudWatch Logs    |
+| `locals.tf`    | Convencoes locais      | Nomes compartilhados dos recursos do laboratorio       |
 | `providers.tf` | Provider e tags        | AWS provider, identidade e AZs disponiveis             |
 | `versions.tf`  | Versoes e backend      | Terraform, AWS provider e state S3                     |
-| `identity/`    | Identidade de CI/CD    | Roles OIDC, trust policies e permissions policies      |
 | `iam/trust/`   | Trust de runtime       | Template JSON usado pelas roles de task do ECS         |
 
 ## Enderecamento
@@ -54,27 +54,15 @@ O lifecycle do service ignora alteracoes em `task_definition` e `desired_count`.
 evita que um futuro `terraform apply` reverta uma versao implantada pelo CD ou reduza
 o service novamente para zero.
 
-## Identidade automatizada
+## Identidade compartilhada
 
-`infra/identity` e aplicada automaticamente depois de um CI bem-sucedido na `main`.
-Ela recebe uma credencial temporaria da role compartilhada apenas para garantir duas
-roles de aplicacao:
-
-| Role                         | Uso                      | Limite                                               |
-| ---------------------------- | ------------------------ | ---------------------------------------------------- |
-| `fargateflow-terraform-role` | Plan e apply do runtime  | Repositorio `kaiotcp1/ECS`, branch `main`            |
-| `fargateflow-deploy-role`    | Push no ECR e deploy ECS | Repositorio `kaiotcp1/ECS`, environment `production` |
-
-As policies de permissao e de confianca sao arquivos JSON separados em
-`identity/policy` e `identity/trust`. Arquivos com extensao `.json.tftpl` recebem
-somente os valores dinamicos necessarios, como account ID, regiao e repositorio.
+Terraform, destroy e CD assumem a mesma role `github-actions-deploy-role` via OIDC.
+Ela e um recurso compartilhado da conta, fora deste state, e pode ser reutilizada por
+outros projetos pessoais nas branches `main`, `develop` e `homolog`.
 
 As roles de runtime do ECS continuam em `iam.tf`; seu trust policy tambem e um template
 JSON. A task role da API nao recebe nenhuma permissao AWS ate que exista uma dependencia
 real que a justifique.
-
-O state de identidade e separado do state do runtime para que `terraform destroy` do
-laboratorio nao remova as credenciais necessarias para recria-lo.
 
 ## Gates de ciclo de vida
 
@@ -89,8 +77,8 @@ true  -> executa apply automatico do runtime
 
 Com `destroy_infrastructure=true`, o workflow encadeado `Destroy runtime` cria e aplica
 um plano `terraform plan -destroy` para o state `fargateflow/study`. O escopo
-`infra/identity`, o bucket compartilhado e o provedor OIDC ficam preservados. As duas
-chaves sao mutuamente exclusivas.
+o bucket compartilhado, o provedor OIDC e a role compartilhada ficam preservados. As
+duas chaves sao mutuamente exclusivas.
 
 Elas nao sao usadas em `count` ou `for_each`. Por isso, alterar para `false` nao pede
 a destruicao dos recursos existentes; apenas bloqueia a respectiva operacao automatica.
@@ -100,7 +88,6 @@ a destruicao dos recursos existentes; apenas bloqueia a respectiva operacao auto
 ```text
 Bucket: terraform-states-761018861028-us-east-1
 Runtime key:  fargateflow/study/terraform.tfstate
-Identity key: fargateflow/identity/terraform.tfstate
 ```
 
 O bucket tem versionamento, criptografia SSE-S3 AES-256, ownership forçado para a
@@ -125,3 +112,10 @@ Owner=kaio
 ```
 
 Essas tags permitem inventario, filtros de auditoria e analise de custos por projeto.
+
+## Convencoes locais
+
+`providers.tf` centraliza tags comuns com `default_tags`, enquanto `locals.tf` concentra
+nomes usados em mais de um recurso, como ALB, cluster, service e security groups. Esse
+padrao evita nomes e tags dispersos sem criar modulos Terraform para uma infraestrutura
+que ainda pertence a um unico projeto.

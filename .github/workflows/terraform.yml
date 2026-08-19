@@ -23,8 +23,7 @@ concurrency:
 env:
   AWS_REGION: us-east-1
   AWS_ACCOUNT_ID: '761018861028'
-  BOOTSTRAP_ROLE_ARN: arn:aws:iam::761018861028:role/github-actions-deploy-role
-  TERRAFORM_ROLE_ARN: arn:aws:iam::761018861028:role/fargateflow-terraform-role
+  AWS_ROLE_ARN: arn:aws:iam::761018861028:role/github-actions-deploy-role
   TF_IN_AUTOMATION: 'true'
 
 jobs:
@@ -57,62 +56,13 @@ jobs:
         working-directory: infra
         run: terraform validate
 
-      - name: Initialize identity without remote backend
-        working-directory: infra/identity
-        run: terraform init -backend=false
-
-      - name: Validate identity configuration
-        working-directory: infra/identity
-        run: terraform validate
-
-  ensure-identity:
-    name: Ensure application identity
-    if: >-
-      github.event_name != 'pull_request' &&
-      (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success') &&
-      github.ref == 'refs/heads/main'
-    needs: validate
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
-        with:
-          terraform_version: 1.15.8
-
-      - name: Configure bootstrap AWS credentials
-        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
-        with:
-          role-to-assume: ${{ env.BOOTSTRAP_ROLE_ARN }}
-          role-session-name: fargateflow-identity-${{ github.run_id }}
-          aws-region: ${{ env.AWS_REGION }}
-          allowed-account-ids: ${{ env.AWS_ACCOUNT_ID }}
-          role-duration-seconds: 3600
-          mask-aws-account-id: true
-
-      - name: Initialize identity backend
-        working-directory: infra/identity
-        run: terraform init -input=false
-
-      - name: Apply application identity
-        working-directory: infra/identity
-        run: terraform apply -input=false -auto-approve
-
   plan:
     name: Plan Terraform
     if: >-
       github.event_name != 'pull_request' &&
       (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success') &&
       github.ref == 'refs/heads/main'
-    needs: ensure-identity
+    needs: validate
     runs-on: ubuntu-latest
     outputs:
       provision_infrastructure: ${{ steps.provisioning.outputs.enabled }}
@@ -162,7 +112,7 @@ jobs:
       - name: Configure Terraform AWS credentials
         uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
         with:
-          role-to-assume: ${{ env.TERRAFORM_ROLE_ARN }}
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
           role-session-name: terraform-plan-${{ github.run_id }}
           aws-region: ${{ env.AWS_REGION }}
           allowed-account-ids: ${{ env.AWS_ACCOUNT_ID }}
@@ -216,7 +166,7 @@ jobs:
       - name: Configure Terraform AWS credentials
         uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
         with:
-          role-to-assume: ${{ env.TERRAFORM_ROLE_ARN }}
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
           role-session-name: terraform-apply-${{ github.run_id }}
           aws-region: ${{ env.AWS_REGION }}
           allowed-account-ids: ${{ env.AWS_ACCOUNT_ID }}

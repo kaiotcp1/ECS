@@ -80,7 +80,6 @@ outros projetos. Cada projeto deve usar uma chave diferente no bloco `backend "s
 ```text
 Bucket: terraform-states-761018861028-us-east-1
 FargateFlow: fargateflow/study/terraform.tfstate
-FargateFlow identity: fargateflow/identity/terraform.tfstate
 Outro projeto: nome-do-projeto/ambiente/terraform.tfstate
 ```
 
@@ -146,11 +145,10 @@ provision_infrastructure = false
 destroy_infrastructure = false
 ```
 
-Com `false`, todo push na `main` executa CI, valida Terraform, garante as roles da
-aplicacao e cria um plan, mas nunca executa `terraform apply`. Altere para `true`,
-versione e envie o arquivo para liberar o apply automatico depois de todas as
-validacoes. Retorne a chave para `false` antes de novos pushes que nao devam recriar
-o laboratorio.
+Com `false`, todo push na `main` executa CI, valida Terraform e cria um plan, mas
+nunca executa `terraform apply`. Altere para `true`, versione e envie o arquivo para
+liberar o apply automatico depois de todas as validacoes. Retorne a chave para `false`
+antes de novos pushes que nao devam recriar o laboratorio.
 
 Com `destroy_infrastructure=true`, o workflow encadeado `Destroy runtime` cria um
 plano `-destroy` e remove somente os recursos do state `fargateflow/study`. As duas
@@ -187,16 +185,8 @@ arquivos de state armazenados geram apenas custo proporcional de S3.
 
 ## Identidade de CI/CD
 
-A role compartilhada `github-actions-deploy-role` e usada apenas pelo job automatico
-`Ensure application identity`. Ela cria ou atualiza, de forma idempotente, as roles
-especificas do FargateFlow:
-
-```text
-fargateflow-terraform-role -> plan e apply do runtime
-fargateflow-deploy-role    -> ECR e ECS no ambiente production
-```
-
-As trust policies e permissions policies ficam em `infra/identity/trust` e
-`infra/identity/policy`. A policy compartilhada de bootstrap esta documentada em
-`docs/github-actions-identity-bootstrap-policy.json` e pode administrar somente essas
-duas roles. O `terraform destroy` do runtime nao remove essa identidade.
+A role compartilhada `github-actions-deploy-role` e assumida via OIDC por todos os
+workflows: Terraform, destroy e CD. Ela usa credenciais temporarias e uma trust policy
+que aceita repositorios da conta GitHub e as branches `main`, `develop` e `homolog`.
+Essa simplicidade e apropriada para o laboratorio e para projetos pessoais; em uma
+organizacao maior, convem separar permissao por repositorio e ambiente.

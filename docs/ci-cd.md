@@ -12,7 +12,6 @@ sequenceDiagram
   participant GH as GitHub
   participant CI as Workflow CI
   participant TF as Workflow Terraform
-  participant Identity as FargateFlow identity
   participant Destroy as Workflow Destroy runtime
   participant AWS as AWS via OIDC
   participant ECR as Amazon ECR
@@ -25,8 +24,6 @@ sequenceDiagram
   CI-->>GH: sucesso
   GH->>TF: dispara workflow Terraform
   TF->>AWS: assume role compartilhada por OIDC
-  TF->>Identity: garante roles e policies da aplicacao
-  TF->>AWS: assume fargateflow-terraform-role
   TF->>TF: validate e plan
   alt provision_infrastructure = true
     TF->>AWS: terraform apply do runtime
@@ -40,7 +37,7 @@ sequenceDiagram
   else destroy_infrastructure = false
     Destroy->>Destroy: registra destroy bloqueado
   end
-  GH->>AWS: workflow CD assume fargateflow-deploy-role
+  GH->>AWS: workflow CD assume role compartilhada
   AWS-->>GH: credenciais temporarias
   GH->>ECR: build e push ARM64 por commit SHA
   GH->>ECR: aguarda scan HIGH/CRITICAL
@@ -65,11 +62,10 @@ Uma falha impede o acionamento automatico do CD.
 ## Terraform
 
 Em pull requests, executa `fmt`, inicializacao sem backend e `validate`, sem acessar a
-conta AWS. Depois de um CI bem-sucedido na `main`, executa tres estagios ordenados:
+conta AWS. Depois de um CI bem-sucedido na `main`:
 
-1. assume a role compartilhada por OIDC e aplica `infra/identity` de forma idempotente;
-2. assume `fargateflow-terraform-role` e gera o plan do runtime;
-3. consulta `provision_infrastructure` e `destroy_infrastructure` em
+1. assume `github-actions-deploy-role` por OIDC e gera o plan do runtime;
+2. consulta `provision_infrastructure` e `destroy_infrastructure` em
    `infra/environments/study.tfvars`.
 
 O valor padrao e `false`: o plan continua visivel, mas o job de apply e ignorado. Com
@@ -79,16 +75,15 @@ estar em `true` ao mesmo tempo.
 ## Destroy runtime
 
 Depois de Terraform, o workflow de governanca le `destroy_infrastructure`. Com a
-chave em `true`, assume `fargateflow-terraform-role`, cria um plano `-destroy` e aplica
-o plano do state do runtime. O state de identidade, o bucket compartilhado e o provedor
-OIDC nao pertencem a esse escopo. O CD le a mesma chave e e ignorado quando ha uma
-destruicao solicitada.
+chave em `true`, assume `github-actions-deploy-role`, cria um plano `-destroy` e aplica
+o plano do state do runtime. O bucket compartilhado, o provedor OIDC e a role
+compartilhada nao pertencem a esse escopo. O CD le a mesma chave e e ignorado quando
+ha uma destruicao solicitada.
 
 ## CD
 
 O CD inicia depois de um workflow Terraform bem-sucedido na `main` ou por acionamento
-manual na mesma branch. O job usa o GitHub Environment `production`, exigido pela trust
-policy da role de deploy. Primeiro confirma que ECR e service ECS existem; se a stack
+manual na mesma branch. Primeiro confirma que ECR e service ECS existem; se a stack
 estiver destruida, finaliza com sucesso e registra que o deploy foi ignorado.
 
 Quando a infraestrutura existe:
@@ -108,9 +103,8 @@ resumo legivel do build e do deploy.
 
 ## Identidade
 
-Os workflows solicitam `id-token: write` somente nos jobs que acessam a AWS. A role
-compartilhada `github-actions-deploy-role` e limitada ao job de identidade. Depois
-desse job, o Terraform usa `fargateflow-terraform-role` e o CD usa
-`fargateflow-deploy-role`. As trust policies limitam repositorio, branch e, no deploy,
-o environment `production`. O account ID e mascarado pelas actions; nomes de recursos,
-commit SHA e digests exibidos no summary sao metadados operacionais, nao segredos.
+Os workflows solicitam `id-token: write` somente nos jobs que acessam a AWS. Terraform,
+destroy e CD assumem a role compartilhada `github-actions-deploy-role`. Sua trust policy
+limita a organizacao GitHub e as branches permitidas. O account ID e mascarado pelas
+actions; nomes de recursos, commit SHA e digests exibidos no summary sao metadados
+operacionais, nao segredos.
