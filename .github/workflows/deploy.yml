@@ -56,11 +56,33 @@ jobs:
           role-duration-seconds: 3600
           mask-aws-account-id: true
 
+      - name: Check deployment infrastructure
+        id: infrastructure
+        run: |
+          set -euo pipefail
+
+          service_status="$(aws ecs describe-services \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE" \
+            --query "length(services[?status=='ACTIVE'])" \
+            --output text 2>/dev/null || true)"
+
+          if aws ecr describe-repositories \
+            --repository-names "$ECR_REPOSITORY" \
+            > /dev/null 2>&1 && [[ "$service_status" == "1" ]]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "FargateFlow infrastructure is absent; deployment skipped."
+          fi
+
       - name: Log in to Amazon ECR
+        if: steps.infrastructure.outputs.exists == 'true'
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@d539f0932e70871a027e9d5a9d8fc38589180a64 # v2.1.6
 
       - name: Define image tag
+        if: steps.infrastructure.outputs.exists == 'true'
         id: image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
@@ -82,17 +104,17 @@ jobs:
           fi
 
       - name: Set up QEMU
-        if: steps.image.outputs.exists != 'true'
+        if: steps.infrastructure.outputs.exists == 'true' && steps.image.outputs.exists != 'true'
         uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
         with:
           platforms: arm64
 
       - name: Set up Docker Buildx
-        if: steps.image.outputs.exists != 'true'
+        if: steps.infrastructure.outputs.exists == 'true' && steps.image.outputs.exists != 'true'
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
 
       - name: Build and push ARM64 image
-        if: steps.image.outputs.exists != 'true'
+        if: steps.infrastructure.outputs.exists == 'true' && steps.image.outputs.exists != 'true'
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
@@ -107,6 +129,7 @@ jobs:
           sbom: false
 
       - name: Validate ECR vulnerability scan
+        if: steps.infrastructure.outputs.exists == 'true'
         env:
           IMAGE_TAG: ${{ steps.image.outputs.tag }}
         run: |
@@ -131,6 +154,7 @@ jobs:
           fi
 
       - name: Resolve immutable image digest
+        if: steps.infrastructure.outputs.exists == 'true'
         id: image-digest
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
@@ -150,6 +174,7 @@ jobs:
           echo "uri=${ECR_REGISTRY}/${ECR_REPOSITORY}@${digest}" >> "$GITHUB_OUTPUT"
 
       - name: Render Amazon ECS task definition
+        if: steps.infrastructure.outputs.exists == 'true'
         id: render-task-definition
         uses: aws-actions/amazon-ecs-render-task-definition@138c24f321fdbdf7edee4a685519d253cae2cdea # v1.9.0
         with:
@@ -158,6 +183,7 @@ jobs:
           image: ${{ steps.image-digest.outputs.uri }}
 
       - name: Deploy Amazon ECS task definition
+        if: steps.infrastructure.outputs.exists == 'true'
         id: deploy
         uses: aws-actions/amazon-ecs-deploy-task-definition@c465972ecbd160473f22e683363b422a5412a3de # v2.6.3
         with:
@@ -180,10 +206,26 @@ jobs:
             --tags \
               key=Project,value=aws-fargate-infrastructure-lab \
               key=Environment,value=study \
-              key=ManagedBy,value=manual \
+              key=ManagedBy,value=terraform \
               key=Owner,value=kaio
 
+      - name: Scale application service
+        if: steps.infrastructure.outputs.exists == 'true'
+        run: |
+          set -euo pipefail
+
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE" \
+            --desired-count 2 \
+            > /dev/null
+
+          aws ecs wait services-stable \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE"
+
       - name: Smoke test public health endpoint
+        if: steps.infrastructure.outputs.exists == 'true'
         run: |
           set -euo pipefail
 
@@ -204,6 +246,7 @@ jobs:
           jq -e '.status == "ok"' <<< "$response"
 
       - name: Write deployment summary
+        if: steps.infrastructure.outputs.exists == 'true'
         run: |
           {
             echo "### Amazon ECS deployment"
@@ -213,4 +256,13 @@ jobs:
             echo "- Task definition: \`${{ steps.deploy.outputs.task-definition-arn }}\`"
             echo "- Service: \`${ECS_CLUSTER}/${ECS_SERVICE}\`"
             echo "- Health check: passed"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Write skipped deployment summary
+        if: steps.infrastructure.outputs.exists != 'true'
+        run: |
+          {
+            echo "### Amazon ECS deployment"
+            echo
+            echo "FargateFlow infrastructure is absent. Deployment was skipped."
           } >> "$GITHUB_STEP_SUMMARY"
