@@ -90,7 +90,7 @@ Quando a infraestrutura existe:
 
 1. autentica na AWS e no ECR com credenciais temporarias;
 2. reutiliza a imagem se o SHA do commit ja estiver publicado;
-3. gera uma imagem `linux/arm64` com cache do GitHub Actions;
+3. gera uma imagem `linux/arm64`;
 4. bloqueia a entrega se o scan ECR encontrar severidade `HIGH` ou `CRITICAL`;
 5. resolve o digest imutavel da imagem;
 6. registra e implanta uma nova task definition;

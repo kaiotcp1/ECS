@@ -150,8 +150,6 @@ jobs:
           pull: true
           tags: ${{ steps.image.outputs.uri }}
           build-args: NODE_VERSION=24
-          cache-from: type=gha,scope=fargateflow-arm64
-          cache-to: type=gha,mode=max,scope=fargateflow-arm64
           provenance: false
           sbom: false
 
