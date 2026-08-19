@@ -1,22 +1,16 @@
 name: Terraform
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - infra/**
-      - docs/terraform-state-bucket-policy.json
-      - .github/workflows/terraform.yml
-      - README.md
   pull_request:
     branches:
       - main
-    paths:
-      - infra/**
-      - docs/terraform-state-bucket-policy.json
-      - .github/workflows/terraform.yml
-      - README.md
+  workflow_run:
+    workflows:
+      - CI
+    branches:
+      - main
+    types:
+      - completed
   workflow_dispatch:
 
 permissions:
@@ -29,17 +23,23 @@ concurrency:
 env:
   AWS_REGION: us-east-1
   AWS_ACCOUNT_ID: '761018861028'
-  AWS_ROLE_ARN: arn:aws:iam::761018861028:role/github-actions-deploy-role
+  BOOTSTRAP_ROLE_ARN: arn:aws:iam::761018861028:role/github-actions-deploy-role
+  TERRAFORM_ROLE_ARN: arn:aws:iam::761018861028:role/fargateflow-terraform-role
   TF_IN_AUTOMATION: 'true'
 
 jobs:
   validate:
     name: Validate Terraform
+    if: >-
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
@@ -57,9 +57,20 @@ jobs:
         working-directory: infra
         run: terraform validate
 
-  plan:
-    name: Plan Terraform
-    if: github.event_name != 'pull_request'
+      - name: Initialize identity without remote backend
+        working-directory: infra/identity
+        run: terraform init -backend=false
+
+      - name: Validate identity configuration
+        working-directory: infra/identity
+        run: terraform validate
+
+  ensure-identity:
+    name: Ensure application identity
+    if: >-
+      github.event_name != 'pull_request' &&
+      (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success') &&
+      github.ref == 'refs/heads/main'
     needs: validate
     runs-on: ubuntu-latest
     permissions:
@@ -69,16 +80,61 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
         with:
           terraform_version: 1.15.8
 
-      - name: Configure AWS credentials
+      - name: Configure bootstrap AWS credentials
         uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
         with:
-          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          role-to-assume: ${{ env.BOOTSTRAP_ROLE_ARN }}
+          role-session-name: fargateflow-identity-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: ${{ env.AWS_ACCOUNT_ID }}
+          role-duration-seconds: 3600
+          mask-aws-account-id: true
+
+      - name: Initialize identity backend
+        working-directory: infra/identity
+        run: terraform init -input=false
+
+      - name: Apply application identity
+        working-directory: infra/identity
+        run: terraform apply -input=false -auto-approve
+
+  plan:
+    name: Plan Terraform
+    if: >-
+      github.event_name != 'pull_request' &&
+      (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success') &&
+      github.ref == 'refs/heads/main'
+    needs: ensure-identity
+    runs-on: ubuntu-latest
+    outputs:
+      provision_infrastructure: ${{ steps.provisioning.outputs.enabled }}
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.15.8
+
+      - name: Configure Terraform AWS credentials
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          role-to-assume: ${{ env.TERRAFORM_ROLE_ARN }}
           role-session-name: terraform-plan-${{ github.run_id }}
           aws-region: ${{ env.AWS_REGION }}
           allowed-account-ids: ${{ env.AWS_ACCOUNT_ID }}
@@ -93,7 +149,7 @@ jobs:
         working-directory: infra
         run: |
           set +e
-          terraform plan -input=false -detailed-exitcode -out=tfplan
+          terraform plan -input=false -detailed-exitcode -out=tfplan -var-file="environments/study.tfvars"
           exit_code=$?
           set -e
 
@@ -106,3 +162,57 @@ jobs:
           else
             echo "Terraform state matches the configuration."
           fi
+
+      - name: Read provisioning gate
+        id: provisioning
+        working-directory: infra
+        run: |
+          enabled="$(terraform console -var-file="environments/study.tfvars" <<< 'var.provision_infrastructure')"
+          test "$enabled" = "true" || test "$enabled" = "false"
+          echo "enabled=$enabled" >> "$GITHUB_OUTPUT"
+
+          if [[ "$enabled" == "true" ]]; then
+            echo "Infrastructure provisioning is enabled."
+          else
+            echo "Infrastructure provisioning is disabled; apply will be skipped."
+          fi
+
+  apply:
+    name: Apply Terraform runtime
+    if: needs.plan.outputs.provision_infrastructure == 'true'
+    needs: plan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.15.8
+
+      - name: Configure Terraform AWS credentials
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          role-to-assume: ${{ env.TERRAFORM_ROLE_ARN }}
+          role-session-name: terraform-apply-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: ${{ env.AWS_ACCOUNT_ID }}
+          role-duration-seconds: 3600
+          mask-aws-account-id: true
+
+      - name: Initialize remote backend
+        working-directory: infra
+        run: terraform init -input=false
+
+      - name: Apply reviewed configuration
+        working-directory: infra
+        run: |
+          terraform plan -input=false -out=tfplan -var-file="environments/study.tfvars"
+          terraform apply -input=false tfplan

@@ -38,3 +38,9 @@ variable "desired_count" {
     error_message = "desired_count deve estar entre 0 e 4."
   }
 }
+
+variable "provision_infrastructure" {
+  description = "Chave de autorizacao para o job de apply da pipeline. Nao deve ser usada para condicionar recursos Terraform."
+  type        = bool
+  default     = false
+}
