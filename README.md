@@ -1,5 +1,16 @@
 # AWS Fargate Infrastructure Lab (FargateFlow)
 
+[![CI](https://github.com/kaiotcp1/ECS/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/kaiotcp1/ECS/actions/workflows/ci.yml)
+[![Terraform](https://github.com/kaiotcp1/ECS/actions/workflows/terraform.yml/badge.svg?branch=main)](https://github.com/kaiotcp1/ECS/actions/workflows/terraform.yml)
+[![CD](https://github.com/kaiotcp1/ECS/actions/workflows/deploy.yml/badge.svg?branch=main)](https://github.com/kaiotcp1/ECS/actions/workflows/deploy.yml)
+
+![Node.js 24](https://img.shields.io/badge/Node.js-24-339933?logo=nodedotjs&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
+![Fastify](https://img.shields.io/badge/Fastify-5-000000?logo=fastify&logoColor=white)
+![Terraform](https://img.shields.io/badge/Terraform-1.15-844FBA?logo=terraform&logoColor=white)
+![AWS Fargate](https://img.shields.io/badge/AWS-ECS_Fargate-FF9900?logo=amazonwebservices&logoColor=white)
+![Docker ARM64](https://img.shields.io/badge/Docker-linux%2Farm64-2496ED?logo=docker&logoColor=white)
+
 API minima em Node.js, TypeScript e Fastify usada para estudar uma implantacao real
 em Amazon ECS com AWS Fargate. A infraestrutura da aplicacao e declarada em Terraform;
 o GitHub Actions valida o codigo, publica uma imagem ARM64 imutavel no ECR e atualiza o
@@ -7,13 +18,31 @@ servico ECS.
 
 ## Arquitetura
 
-- Application Load Balancer publico em duas subnets publicas.
-- Duas tarefas Fargate ARM64 em subnets privadas.
-- NAT Gateway regional em modo automatico para saida das tarefas.
-- ECR privado com tags imutaveis e scan basico no push.
-- CloudWatch Logs com retencao de tres dias.
-- GitHub Actions autenticado na AWS por OIDC, sem access keys permanentes.
-- State remoto no S3 com versionamento e lockfile nativo.
+O trafego entra por um Application Load Balancer publico e chega a tarefas Fargate
+ARM64 executadas sem IP publico em duas zonas de disponibilidade. Imagens imutaveis
+ficam no ECR, logs estruturados seguem para o CloudWatch e o GitHub Actions acessa a
+AWS por OIDC, sem access keys permanentes.
+
+```mermaid
+flowchart LR
+  client([Cliente]) -->|HTTP :80| alb[Application Load Balancer]
+  alb --> tg[Target Group<br/>/health]
+  tg --> a[ECS Fargate ARM64<br/>subnet privada A]
+  tg --> b[ECS Fargate ARM64<br/>subnet privada B]
+  a --> logs[(CloudWatch Logs)]
+  b --> logs
+  ecr[(Amazon ECR)] -. imagem por digest .-> a
+  ecr -. imagem por digest .-> b
+```
+
+### Documentacao por escopo
+
+- [Visao geral da documentacao](docs/README.md)
+- [Arquitetura cloud e diagramas](docs/architecture.md)
+- [Aplicacao e container](docs/application.md)
+- [Infraestrutura Terraform](docs/infrastructure.md)
+- [Pipelines CI/CD](docs/ci-cd.md)
+- [Operacao, seguranca e custos](docs/operations.md)
 
 O bucket de state e o provedor OIDC sao compartilhados pela conta. Eles nao pertencem
 ao state do FargateFlow e, portanto, nao sao removidos por `terraform destroy`.
