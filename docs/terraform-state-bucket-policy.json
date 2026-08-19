@@ -7,8 +7,8 @@
       "Principal": "*",
       "Action": "s3:*",
       "Resource": [
-        "arn:aws:s3:::kaiotcp1-terraform-state-761018861028-us-east-1",
-        "arn:aws:s3:::kaiotcp1-terraform-state-761018861028-us-east-1/*"
+        "arn:aws:s3:::terraform-states-761018861028-us-east-1",
+        "arn:aws:s3:::terraform-states-761018861028-us-east-1/*"
       ],
       "Condition": {
         "Bool": {

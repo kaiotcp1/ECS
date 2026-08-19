@@ -49,7 +49,7 @@ O bucket abaixo foi criado uma unica vez pela AWS CLI e pode armazenar states de
 outros projetos. Cada projeto deve usar uma chave diferente no bloco `backend "s3"`.
 
 ```text
-Bucket: kaiotcp1-terraform-state-761018861028-us-east-1
+Bucket: terraform-states-761018861028-us-east-1
 FargateFlow: fargateflow/study/terraform.tfstate
 Outro projeto: nome-do-projeto/ambiente/terraform.tfstate
 ```
@@ -57,12 +57,14 @@ Outro projeto: nome-do-projeto/ambiente/terraform.tfstate
 Criacao reproduzivel em `us-east-1`:
 
 ```powershell
-$bucket = "kaiotcp1-terraform-state-761018861028-us-east-1"
+$bucket = "terraform-states-761018861028-us-east-1"
 
 aws s3api create-bucket --bucket $bucket --region us-east-1
 aws s3api put-public-access-block --bucket $bucket --public-access-block-configuration "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
 aws s3api put-bucket-versioning --bucket $bucket --versioning-configuration Status=Enabled
-aws s3api put-bucket-tagging --bucket $bucket --tagging "TagSet=[{Key=Name,Value=kaiotcp1-terraform-state},{Key=Purpose,Value=terraform-state},{Key=ManagedBy,Value=cli},{Key=Owner,Value=kaio}]"
+aws s3api put-bucket-encryption --bucket $bucket --server-side-encryption-configuration "Rules=[{ApplyServerSideEncryptionByDefault={SSEAlgorithm=AES256}}]"
+aws s3api put-bucket-ownership-controls --bucket $bucket --ownership-controls "Rules=[{ObjectOwnership=BucketOwnerEnforced}]"
+aws s3api put-bucket-tagging --bucket $bucket --tagging "TagSet=[{Key=Name,Value=terraform-states},{Key=Purpose,Value=terraform-states},{Key=ManagedBy,Value=cli},{Key=Owner,Value=kaio}]"
 aws s3api put-bucket-policy --bucket $bucket --policy file://docs/terraform-state-bucket-policy.json
 ```
 
