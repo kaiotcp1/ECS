@@ -5,3 +5,16 @@ coverage
 .env.*
 !.env.example
 npm-debug.log*
+
+# Terraform local artifacts and sensitive state
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfplan
+**/tfplan
+*.tfvars
+!*.tfvars.example
+crash.log
+crash.*.log
+.terraformrc
+terraform.rc
