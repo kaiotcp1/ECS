@@ -80,6 +80,7 @@ outros projetos. Cada projeto deve usar uma chave diferente no bloco `backend "s
 ```text
 Bucket: terraform-states-761018861028-us-east-1
 FargateFlow: fargateflow/study/terraform.tfstate
+FargateFlow identity: fargateflow/identity/terraform.tfstate
 Outro projeto: nome-do-projeto/ambiente/terraform.tfstate
 ```
 
@@ -119,8 +120,8 @@ cd infra
 terraform init
 terraform fmt -check -recursive
 terraform validate
-terraform plan
-terraform apply
+terraform plan -var-file=environments/study.tfvars
+terraform apply -var-file=environments/study.tfvars
 ```
 
 O primeiro `apply` cria o servico ECS com zero tarefas, pois o ECR ainda pode estar
@@ -135,6 +136,23 @@ vazio. Depois disso, o workflow `CD`:
 Alteracoes de `desired_count` e `task_definition` feitas pelo CD sao ignoradas pelo
 Terraform para evitar disputa de ownership entre as duas ferramentas.
 
+### Provisionamento automatico com trava de custo
+
+O arquivo `infra/environments/study.tfvars` controla o ultimo job da pipeline:
+
+```hcl
+provision_infrastructure = false
+```
+
+Com `false`, todo push na `main` executa CI, valida Terraform, garante as roles da
+aplicacao e cria um plan, mas nunca executa `terraform apply`. Altere para `true`,
+versione e envie o arquivo para liberar o apply automatico depois de todas as
+validacoes. Retorne a chave para `false` antes de novos pushes que nao devam recriar
+o laboratorio.
+
+Essa chave controla a pipeline, nao os recursos Terraform. Assim, mudar para `false`
+nunca gera um plano de destruicao acidental.
+
 ## Custos e remocao
 
 NAT Gateway, enderecos IPv4 publicos, Application Load Balancer e tarefas Fargate
@@ -142,8 +160,8 @@ geram cobranca enquanto existem. Ao terminar o laboratorio:
 
 ```powershell
 cd infra
-terraform plan -destroy
-terraform destroy
+terraform plan -destroy -var-file=environments/study.tfvars
+terraform destroy -var-file=environments/study.tfvars
 ```
 
 Confirme que nao sobraram recursos do projeto:
@@ -160,15 +178,18 @@ O state S3, o provedor GitHub OIDC e a role compartilhada do GitHub Actions perm
 para os proximos projetos. Um bucket vazio nao tem custo de armazenamento; os pequenos
 arquivos de state armazenados geram apenas custo proporcional de S3.
 
-## Permissoes do plan no GitHub Actions
+## Identidade de CI/CD
 
-A role compartilhada usa `PowerUserAccess`, que exclui operacoes de IAM. O refresh do
-Terraform precisa ler as roles referenciadas pela stack, mesmo sem altera-las. A policy
-inline `TerraformReadIAM` libera somente consultas `iam:Get*` e `iam:List*`:
+A role compartilhada `github-actions-deploy-role` e usada apenas pelo job automatico
+`Ensure application identity`. Ela cria ou atualiza, de forma idempotente, as roles
+especificas do FargateFlow:
 
-```powershell
-aws iam put-role-policy --role-name github-actions-deploy-role --policy-name TerraformReadIAM --policy-document file://docs/github-actions-terraform-read-policy.json
+```text
+fargateflow-terraform-role -> plan e apply do runtime
+fargateflow-deploy-role    -> ECR e ECS no ambiente production
 ```
 
-Essa policy nao permite criar, alterar ou excluir identidades. A permissao separada
-`iam:PassRole` continua limitada as roles de runtime previamente aprovadas.
+As trust policies e permissions policies ficam em `infra/identity/trust` e
+`infra/identity/policy`. A policy compartilhada de bootstrap esta documentada em
+`docs/github-actions-identity-bootstrap-policy.json` e pode administrar somente essas
+duas roles. O `terraform destroy` do runtime nao remove essa identidade.

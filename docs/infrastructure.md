@@ -1,8 +1,8 @@
 # Infraestrutura Terraform
 
-O diretorio `infra/` declara todo o runtime do FargateFlow. O bucket de state, o
-provedor OIDC do GitHub e a role compartilhada de automacao sao pre-requisitos da
-conta e permanecem fora deste state.
+O diretorio `infra/` contem duas raizes Terraform com ownership distinto. A identidade
+permanece para permitir novas execucoes da pipeline; o runtime e efemero e pode ser
+destruido ao fim do laboratorio.
 
 ## Inventario
 
@@ -16,6 +16,8 @@ conta e permanecem fora deste state.
 | `ecs.tf`       | Computacao e logs      | Cluster, task definition, service e CloudWatch Logs    |
 | `providers.tf` | Provider e tags        | AWS provider, identidade e AZs disponiveis             |
 | `versions.tf`  | Versoes e backend      | Terraform, AWS provider e state S3                     |
+| `identity/`    | Identidade de CI/CD    | Roles OIDC, trust policies e permissions policies      |
+| `iam/trust/`   | Trust de runtime       | Template JSON usado pelas roles de task do ECS         |
 
 ## Enderecamento
 
@@ -52,12 +54,47 @@ O lifecycle do service ignora alteracoes em `task_definition` e `desired_count`.
 evita que um futuro `terraform apply` reverta uma versao implantada pelo CD ou reduza
 o service novamente para zero.
 
+## Identidade automatizada
+
+`infra/identity` e aplicada automaticamente depois de um CI bem-sucedido na `main`.
+Ela recebe uma credencial temporaria da role compartilhada apenas para garantir duas
+roles de aplicacao:
+
+| Role                         | Uso                      | Limite                                               |
+| ---------------------------- | ------------------------ | ---------------------------------------------------- |
+| `fargateflow-terraform-role` | Plan e apply do runtime  | Repositorio `kaiotcp1/ECS`, branch `main`            |
+| `fargateflow-deploy-role`    | Push no ECR e deploy ECS | Repositorio `kaiotcp1/ECS`, environment `production` |
+
+As policies de permissao e de confianca sao arquivos JSON separados em
+`identity/policy` e `identity/trust`. Arquivos com extensao `.json.tftpl` recebem
+somente os valores dinamicos necessarios, como account ID, regiao e repositorio.
+
+As roles de runtime do ECS continuam em `iam.tf`; seu trust policy tambem e um template
+JSON. A task role da API nao recebe nenhuma permissao AWS ate que exista uma dependencia
+real que a justifique.
+
+O state de identidade e separado do state do runtime para que `terraform destroy` do
+laboratorio nao remova as credenciais necessarias para recria-lo.
+
+## Gate de provisionamento
+
+O arquivo `environments/study.tfvars` contem `provision_infrastructure`. A variavel e
+avaliada pela pipeline somente depois de `validate` e `plan`:
+
+```text
+false -> nao executa apply; nenhum recurso cobravel e criado
+true  -> executa apply automatico do runtime
+```
+
+Ela nao e usada em `count` ou `for_each`. Por isso, alterar para `false` nao pede a
+destruicao dos recursos existentes; apenas impede um novo apply automatico.
+
 ## State remoto compartilhado
 
 ```text
 Bucket: terraform-states-761018861028-us-east-1
-Key:    fargateflow/study/terraform.tfstate
-Lock:   fargateflow/study/terraform.tfstate.tflock
+Runtime key:  fargateflow/study/terraform.tfstate
+Identity key: fargateflow/identity/terraform.tfstate
 ```
 
 O bucket tem versionamento, criptografia SSE-S3 AES-256, ownership forçado para a

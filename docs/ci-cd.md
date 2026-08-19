@@ -12,22 +12,28 @@ sequenceDiagram
   participant GH as GitHub
   participant CI as Workflow CI
   participant TF as Workflow Terraform
+  participant Identity as FargateFlow identity
   participant AWS as AWS via OIDC
   participant ECR as Amazon ECR
   participant ECS as Amazon ECS
   participant ALB as Application Load Balancer
 
   Dev->>GH: push na main
-  par Aplicacao
-    GH->>CI: dispara validacao
-    CI->>CI: format, lint, test, build
-  and Infraestrutura alterada
-    GH->>TF: dispara validacao e plan
-    TF->>AWS: assume role com OIDC
-    TF->>AWS: refresh e terraform plan
-  end
+  GH->>CI: dispara validacao
+  CI->>CI: format, lint, test, build
   CI-->>GH: sucesso
-  GH->>AWS: workflow CD assume role com OIDC
+  GH->>TF: dispara workflow Terraform
+  TF->>AWS: assume role compartilhada por OIDC
+  TF->>Identity: garante roles e policies da aplicacao
+  TF->>AWS: assume fargateflow-terraform-role
+  TF->>TF: validate e plan
+  alt provision_infrastructure = true
+    TF->>AWS: terraform apply do runtime
+  else provision_infrastructure = false
+    TF->>TF: registra apply bloqueado
+  end
+  TF-->>GH: sucesso
+  GH->>AWS: workflow CD assume fargateflow-deploy-role
   AWS-->>GH: credenciais temporarias
   GH->>ECR: build e push ARM64 por commit SHA
   GH->>ECR: aguarda scan HIGH/CRITICAL
@@ -52,17 +58,22 @@ Uma falha impede o acionamento automatico do CD.
 ## Terraform
 
 Em pull requests, executa `fmt`, inicializacao sem backend e `validate`, sem acessar a
-conta AWS. Em pushes na `main` que alteram os caminhos monitorados, tambem assume a
-role AWS por OIDC, inicializa o backend S3 e gera um `terraform plan`.
+conta AWS. Depois de um CI bem-sucedido na `main`, executa tres estagios ordenados:
 
-O workflow nao executa `terraform apply` nem `terraform destroy`. Essa separacao torna
-mudancas de infraestrutura visiveis antes de qualquer criacao com custo.
+1. assume a role compartilhada por OIDC e aplica `infra/identity` de forma idempotente;
+2. assume `fargateflow-terraform-role` e gera o plan do runtime;
+3. consulta `provision_infrastructure` em `infra/environments/study.tfvars`.
+
+O valor padrao e `false`: o plan continua visivel, mas o job de apply e ignorado. Com
+`true`, a pipeline executa um novo plan e aplica o runtime. O workflow nunca executa
+`terraform destroy`; essa operacao continua explicita e manual.
 
 ## CD
 
-O CD inicia depois de um CI bem-sucedido na `main` ou por acionamento manual na mesma
-branch. Primeiro confirma que ECR e service ECS existem; se a stack estiver destruida,
-finaliza com sucesso e registra que o deploy foi ignorado.
+O CD inicia depois de um workflow Terraform bem-sucedido na `main` ou por acionamento
+manual na mesma branch. O job usa o GitHub Environment `production`, exigido pela trust
+policy da role de deploy. Primeiro confirma que ECR e service ECS existem; se a stack
+estiver destruida, finaliza com sucesso e registra que o deploy foi ignorado.
 
 Quando a infraestrutura existe:
 
@@ -82,6 +93,8 @@ resumo legivel do build e do deploy.
 ## Identidade
 
 Os workflows solicitam `id-token: write` somente nos jobs que acessam a AWS. A role
-`github-actions-deploy-role` valida o contexto OIDC permitido e fornece credenciais
-temporarias. O account ID e mascarado pelas actions; nomes de recursos, commit SHA e
-digests exibidos no summary sao metadados operacionais, nao segredos.
+compartilhada `github-actions-deploy-role` e limitada ao job de identidade. Depois
+desse job, o Terraform usa `fargateflow-terraform-role` e o CD usa
+`fargateflow-deploy-role`. As trust policies limitam repositorio, branch e, no deploy,
+o environment `production`. O account ID e mascarado pelas actions; nomes de recursos,
+commit SHA e digests exibidos no summary sao metadados operacionais, nao segredos.

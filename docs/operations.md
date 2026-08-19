@@ -8,7 +8,7 @@ Antes do primeiro provisionamento, a conta precisa ter:
 
 - bucket `terraform-states-761018861028-us-east-1`;
 - provedor IAM OIDC do GitHub;
-- role `github-actions-deploy-role` e suas permissoes;
+- role compartilhada `github-actions-deploy-role` com a policy de identidade;
 - AWS CLI autenticada na conta e regiao corretas para operacao local.
 
 Esses recursos sao reutilizados por outros projetos e nao pertencem ao state do
@@ -21,12 +21,23 @@ cd infra
 terraform init
 terraform fmt -check -recursive
 terraform validate
-terraform plan -out=tfplan
+terraform plan -var-file=environments/study.tfvars -out=tfplan
 terraform apply tfplan
 ```
 
 O apply cria o service com zero tarefas. Em seguida, execute o workflow `CD` na branch
 `main`; ele publica a primeira imagem e escala o service para duas tarefas.
+
+Para permitir criacao automatica pela pipeline, altere temporariamente:
+
+```hcl
+# infra/environments/study.tfvars
+provision_infrastructure = true
+```
+
+Envie a alteracao para `main`. Depois do provisionamento e da validacao do endpoint,
+retorne o valor para `false` antes de novos pushes. Com `false`, a pipeline ainda
+executa CI, identidade e plan, mas nao cria recursos cobraveis.
 
 ## Validar
 
@@ -90,8 +101,8 @@ stack nao deve permanecer ativa sem necessidade.
 
 ```powershell
 cd infra
-terraform plan -destroy
-terraform destroy
+terraform plan -destroy -var-file=environments/study.tfvars
+terraform destroy -var-file=environments/study.tfvars
 ```
 
 Depois, confirme que os recursos cobraveis do projeto desapareceram:
@@ -104,5 +115,6 @@ aws ecs describe-services --cluster fargateflow-cluster --services fargateflow-s
 aws ecr describe-repositories --repository-names fargateflow
 ```
 
-O bucket compartilhado de states, o provedor OIDC e a role do GitHub devem permanecer.
-O state vazio do FargateFlow preserva o historico sem manter o runtime ativo.
+O bucket compartilhado de states, o provedor OIDC e as roles de identidade do
+FargateFlow devem permanecer. O state vazio do runtime preserva o historico sem manter
+a infraestrutura ativa.
