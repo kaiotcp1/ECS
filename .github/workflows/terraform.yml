@@ -1,0 +1,108 @@
+name: Terraform
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - infra/**
+      - docs/terraform-state-bucket-policy.json
+      - .github/workflows/terraform.yml
+      - README.md
+  pull_request:
+    branches:
+      - main
+    paths:
+      - infra/**
+      - docs/terraform-state-bucket-policy.json
+      - .github/workflows/terraform.yml
+      - README.md
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: terraform-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  AWS_REGION: us-east-1
+  AWS_ACCOUNT_ID: '761018861028'
+  AWS_ROLE_ARN: arn:aws:iam::761018861028:role/github-actions-deploy-role
+  TF_IN_AUTOMATION: 'true'
+
+jobs:
+  validate:
+    name: Validate Terraform
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.15.8
+
+      - name: Check formatting
+        run: terraform fmt -check -recursive
+
+      - name: Initialize without remote backend
+        working-directory: infra
+        run: terraform init -backend=false
+
+      - name: Validate configuration
+        working-directory: infra
+        run: terraform validate
+
+  plan:
+    name: Plan Terraform
+    if: github.event_name != 'pull_request'
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.15.8
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          role-session-name: terraform-plan-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: ${{ env.AWS_ACCOUNT_ID }}
+          role-duration-seconds: 3600
+          mask-aws-account-id: true
+
+      - name: Initialize remote backend
+        working-directory: infra
+        run: terraform init -input=false
+
+      - name: Create execution plan
+        working-directory: infra
+        run: |
+          set +e
+          terraform plan -input=false -detailed-exitcode -out=tfplan
+          exit_code=$?
+          set -e
+
+          if [[ $exit_code -eq 1 ]]; then
+            exit 1
+          fi
+
+          if [[ $exit_code -eq 2 ]]; then
+            echo "Terraform detected infrastructure changes."
+          else
+            echo "Terraform state matches the configuration."
+          fi
