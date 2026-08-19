@@ -128,3 +128,16 @@ aws ecr describe-repositories --repository-names fargateflow
 O state S3, o provedor GitHub OIDC e a role compartilhada do GitHub Actions permanecem
 para os proximos projetos. Um bucket vazio nao tem custo de armazenamento; os pequenos
 arquivos de state armazenados geram apenas custo proporcional de S3.
+
+## Permissoes do plan no GitHub Actions
+
+A role compartilhada usa `PowerUserAccess`, que exclui operacoes de IAM. O refresh do
+Terraform precisa ler as roles referenciadas pela stack, mesmo sem altera-las. A policy
+inline `TerraformReadIAM` libera somente consultas `iam:Get*` e `iam:List*`:
+
+```powershell
+aws iam put-role-policy --role-name github-actions-deploy-role --policy-name TerraformReadIAM --policy-document file://docs/github-actions-terraform-read-policy.json
+```
+
+Essa policy nao permite criar, alterar ou excluir identidades. A permissao separada
+`iam:PassRole` continua limitada as roles de runtime previamente aprovadas.
