@@ -160,6 +160,15 @@ jobs:
         run: |
           set -euo pipefail
 
+          if ! aws ecr describe-image-scan-findings \
+            --repository-name "$ECR_REPOSITORY" \
+            --image-id imageTag="$IMAGE_TAG" \
+            > /dev/null 2>&1; then
+            aws ecr start-image-scan \
+              --repository-name "$ECR_REPOSITORY" \
+              --image-id imageTag="$IMAGE_TAG"
+          fi
+
           aws ecr wait image-scan-complete \
             --repository-name "$ECR_REPOSITORY" \
             --image-id imageTag="$IMAGE_TAG"

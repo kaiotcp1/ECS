@@ -91,7 +91,7 @@ Quando a infraestrutura existe:
 1. autentica na AWS e no ECR com credenciais temporarias;
 2. reutiliza a imagem se o SHA do commit ja estiver publicado;
 3. gera uma imagem `linux/arm64`;
-4. bloqueia a entrega se o scan ECR encontrar severidade `HIGH` ou `CRITICAL`;
+4. inicia o scan ECR quando necessario e bloqueia a entrega se encontrar severidade `HIGH` ou `CRITICAL`;
 5. resolve o digest imutavel da imagem;
 6. registra e implanta uma nova task definition;
 7. aguarda estabilidade e escala o service para duas tarefas;
