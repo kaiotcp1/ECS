@@ -119,8 +119,8 @@ cd infra
 terraform init
 terraform fmt -check -recursive
 terraform validate
-terraform plan -var-file=environments/study.tfvars
-terraform apply -var-file=environments/study.tfvars
+terraform plan
+terraform apply
 ```
 
 O primeiro `apply` cria o servico ECS com zero tarefas, pois o ECR ainda pode estar
@@ -137,8 +137,7 @@ Terraform para evitar disputa de ownership entre as duas ferramentas.
 
 ### Provisionamento automatico com trava de custo
 
-O arquivo `infra/environments/study.tfvars` controla os gates de ciclo de vida da
-pipeline:
+O bloco `locals` em `infra/locals.tf` controla os gates de ciclo de vida da pipeline:
 
 ```hcl
 provision_infrastructure = false
@@ -165,8 +164,8 @@ geram cobranca enquanto existem. Ao terminar o laboratorio:
 
 ```powershell
 cd infra
-terraform plan -destroy -var-file=environments/study.tfvars
-terraform destroy -var-file=environments/study.tfvars
+terraform plan -destroy
+terraform destroy
 ```
 
 Confirme que nao sobraram recursos do projeto:

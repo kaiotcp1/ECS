@@ -21,7 +21,7 @@ cd infra
 terraform init
 terraform fmt -check -recursive
 terraform validate
-terraform plan -var-file=environments/study.tfvars -out=tfplan
+terraform plan -out=tfplan
 terraform apply tfplan
 ```
 
@@ -31,7 +31,7 @@ O apply cria o service com zero tarefas. Em seguida, execute o workflow `CD` na 
 Para permitir criacao automatica pela pipeline, altere temporariamente:
 
 ```hcl
-# infra/environments/study.tfvars
+# infra/locals.tf
 provision_infrastructure = true
 ```
 
@@ -111,8 +111,8 @@ stack nao deve permanecer ativa sem necessidade.
 
 ```powershell
 cd infra
-terraform plan -destroy -var-file=environments/study.tfvars
-terraform destroy -var-file=environments/study.tfvars
+terraform plan -destroy
+terraform destroy
 ```
 
 Depois, confirme que os recursos cobraveis do projeto desapareceram:

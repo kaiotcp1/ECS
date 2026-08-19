@@ -86,8 +86,8 @@ jobs:
         id: provisioning
         working-directory: infra
         run: |
-          enabled="$(sed -nE 's/^provision_infrastructure[[:space:]]*=[[:space:]]*(true|false)[[:space:]]*$/\1/p' environments/study.tfvars)"
-          destroy_enabled="$(sed -nE 's/^destroy_infrastructure[[:space:]]*=[[:space:]]*(true|false)[[:space:]]*$/\1/p' environments/study.tfvars)"
+          enabled="$(sed -nE 's/^[[:space:]]*provision_infrastructure[[:space:]]*=[[:space:]]*(true|false)[[:space:]]*$/\1/p' locals.tf)"
+          destroy_enabled="$(sed -nE 's/^[[:space:]]*destroy_infrastructure[[:space:]]*=[[:space:]]*(true|false)[[:space:]]*$/\1/p' locals.tf)"
           test "$enabled" = "true" || test "$enabled" = "false"
           test "$destroy_enabled" = "true" || test "$destroy_enabled" = "false"
 
@@ -127,7 +127,7 @@ jobs:
         working-directory: infra
         run: |
           set +e
-          terraform plan -input=false -detailed-exitcode -out=tfplan -var-file="environments/study.tfvars"
+          terraform plan -input=false -detailed-exitcode -out=tfplan
           exit_code=$?
           set -e
 
@@ -180,5 +180,5 @@ jobs:
       - name: Apply reviewed configuration
         working-directory: infra
         run: |
-          terraform plan -input=false -out=tfplan -var-file="environments/study.tfvars"
+          terraform plan -input=false -out=tfplan
           terraform apply -input=false tfplan

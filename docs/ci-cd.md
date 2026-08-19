@@ -66,7 +66,7 @@ conta AWS. Depois de um CI bem-sucedido na `main`:
 
 1. assume `github-actions-deploy-role` por OIDC e gera o plan do runtime;
 2. consulta `provision_infrastructure` e `destroy_infrastructure` em
-   `infra/environments/study.tfvars`.
+   `infra/locals.tf`.
 
 O valor padrao e `false`: o plan continua visivel, mas o job de apply e ignorado. Com
 `true`, a pipeline executa um novo plan e aplica o runtime. As duas chaves nao podem

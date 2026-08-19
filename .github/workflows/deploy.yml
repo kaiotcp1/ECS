@@ -52,7 +52,7 @@ jobs:
         id: gate
         working-directory: infra
         run: |
-          destroy_enabled="$(sed -nE 's/^destroy_infrastructure[[:space:]]*=[[:space:]]*(true|false)[[:space:]]*$/\1/p' environments/study.tfvars)"
+          destroy_enabled="$(sed -nE 's/^[[:space:]]*destroy_infrastructure[[:space:]]*=[[:space:]]*(true|false)[[:space:]]*$/\1/p' locals.tf)"
           test "$destroy_enabled" = "true" || test "$destroy_enabled" = "false"
           echo "destroy_enabled=$destroy_enabled" >> "$GITHUB_OUTPUT"
 

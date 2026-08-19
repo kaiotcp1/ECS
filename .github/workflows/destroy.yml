@@ -45,8 +45,8 @@ jobs:
         id: gate
         working-directory: infra
         run: |
-          provision_enabled="$(sed -nE 's/^provision_infrastructure[[:space:]]*=[[:space:]]*(true|false)[[:space:]]*$/\1/p' environments/study.tfvars)"
-          destroy_enabled="$(sed -nE 's/^destroy_infrastructure[[:space:]]*=[[:space:]]*(true|false)[[:space:]]*$/\1/p' environments/study.tfvars)"
+          provision_enabled="$(sed -nE 's/^[[:space:]]*provision_infrastructure[[:space:]]*=[[:space:]]*(true|false)[[:space:]]*$/\1/p' locals.tf)"
+          destroy_enabled="$(sed -nE 's/^[[:space:]]*destroy_infrastructure[[:space:]]*=[[:space:]]*(true|false)[[:space:]]*$/\1/p' locals.tf)"
 
           test "$provision_enabled" = "true" || test "$provision_enabled" = "false"
           test "$destroy_enabled" = "true" || test "$destroy_enabled" = "false"
@@ -100,7 +100,7 @@ jobs:
 
       - name: Create destroy plan
         working-directory: infra
-        run: terraform plan -destroy -input=false -out=tfplan -var-file="environments/study.tfvars"
+        run: terraform plan -destroy -input=false -out=tfplan
 
       - name: Destroy runtime infrastructure
         working-directory: infra

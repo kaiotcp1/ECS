@@ -66,8 +66,8 @@ real que a justifique.
 
 ## Gates de ciclo de vida
 
-O arquivo `environments/study.tfvars` contem `provision_infrastructure` e
-`destroy_infrastructure`. As variaveis sao avaliadas pela pipeline somente depois de
+O bloco `locals` em `locals.tf` contem `provision_infrastructure` e
+`destroy_infrastructure`. Os valores sao avaliados pela pipeline somente depois de
 `validate` e `plan`:
 
 ```text
