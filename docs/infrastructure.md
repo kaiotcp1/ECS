@@ -60,6 +60,11 @@ Terraform, destroy e CD assumem a mesma role `github-actions-deploy-role` via OI
 Ela e um recurso compartilhado da conta, fora deste state, e pode ser reutilizada por
 outros projetos pessoais nas branches `main`, `develop` e `homolog`.
 
+Como `PowerUserAccess` nao inclui IAM, a policy
+`docs/github-actions-fargateflow-runtime-iam-policy.json` complementa a role
+compartilhada com permissoes restritas para criar, atualizar e remover somente as duas
+roles de runtime do ECS deste laboratorio.
+
 As roles de runtime do ECS continuam em `iam.tf`; seu trust policy tambem e um template
 JSON. A task role da API nao recebe nenhuma permissao AWS ate que exista uma dependencia
 real que a justifique.

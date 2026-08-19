@@ -14,6 +14,10 @@ Antes do primeiro provisionamento, a conta precisa ter:
 Esses recursos sao reutilizados por outros projetos e nao pertencem ao state do
 FargateFlow.
 
+A role compartilhada tambem precisa da policy
+`docs/github-actions-fargateflow-runtime-iam-policy.json`, que permite ao Terraform
+gerenciar apenas as roles de runtime do ECS do FargateFlow.
+
 ## Criar a infraestrutura
 
 ```powershell
