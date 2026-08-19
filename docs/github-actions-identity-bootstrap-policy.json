@@ -1,0 +1,38 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ManageFargateFlowApplicationRoles",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:GetRole",
+        "iam:GetRolePolicy",
+        "iam:ListAttachedRolePolicies",
+        "iam:ListRolePolicies",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:UpdateAssumeRolePolicy",
+        "iam:UpdateRole",
+        "iam:TagRole",
+        "iam:UntagRole"
+      ],
+      "Resource": [
+        "arn:aws:iam::761018861028:role/fargateflow-terraform-role",
+        "arn:aws:iam::761018861028:role/fargateflow-deploy-role"
+      ]
+    },
+    {
+      "Sid": "AttachApprovedTerraformManagedPolicy",
+      "Effect": "Allow",
+      "Action": ["iam:AttachRolePolicy", "iam:DetachRolePolicy"],
+      "Resource": "arn:aws:iam::761018861028:role/fargateflow-terraform-role",
+      "Condition": {
+        "StringEquals": {
+          "iam:PolicyARN": "arn:aws:iam::aws:policy/PowerUserAccess"
+        }
+      }
+    }
+  ]
+}

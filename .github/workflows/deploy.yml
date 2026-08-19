@@ -3,7 +3,7 @@ name: CD
 on:
   workflow_run:
     workflows:
-      - CI
+      - Terraform
     branches:
       - main
     types:
@@ -22,7 +22,7 @@ env:
   AWS_REGION: us-east-1
   AWS_ACCOUNT_ID: '761018861028'
   DOCKER_BUILD_RECORD_UPLOAD: 'false'
-  AWS_ROLE_ARN: arn:aws:iam::761018861028:role/github-actions-deploy-role
+  AWS_ROLE_ARN: arn:aws:iam::761018861028:role/fargateflow-deploy-role
   ECR_REPOSITORY: fargateflow
   ECS_CLUSTER: fargateflow-cluster
   ECS_SERVICE: fargateflow-service
@@ -40,6 +40,7 @@ jobs:
       github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    environment: production
 
     steps:
       - name: Checkout validated commit

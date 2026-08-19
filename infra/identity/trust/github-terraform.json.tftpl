@@ -1,0 +1,23 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowTerraformFromFargateFlowMain",
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": "arn:aws:iam::${account_id}:oidc-provider/token.actions.githubusercontent.com"
+      },
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": {
+          "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+          "token.actions.githubusercontent.com:repository": "${github_repository}",
+          "token.actions.githubusercontent.com:ref": "refs/heads/${github_branch}"
+        },
+        "StringLike": {
+          "token.actions.githubusercontent.com:sub": "repo:${github_owner}*/*:ref:refs/heads/${github_branch}"
+        }
+      }
+    }
+  ]
+}
