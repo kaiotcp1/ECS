@@ -63,14 +63,18 @@ flowchart TB
     ci[CI<br/>format + lint + test + build]
     identity[Ensure identity<br/>roles e policies]
     tf[Terraform<br/>validate + plan + apply condicional]
+    destroy[Destroy runtime<br/>destroy condicional]
     cd[CD<br/>build ARM64 + scan + deploy + smoke test]
   end
 
   github --> ci
-  ci -->|sucesso na main| identity --> tf --> cd
+  ci -->|sucesso na main| identity --> tf
+  tf --> destroy
+  tf --> cd
 
   identity -->|OIDC / STS| bootstrap[IAM role compartilhada]
   tf -->|OIDC / STS| terraformRole[fargateflow-terraform-role]
+  destroy -->|OIDC / STS| terraformRole
   cd -->|OIDC / STS| deployRole[fargateflow-deploy-role]
   tf --> state[(S3 Terraform states<br/>state + lockfile)]
   deployRole --> ecr[Amazon ECR]
@@ -111,3 +115,5 @@ quando passa pelos health checks do container, do ECS e do load balancer.
 - **NAT regional:** simplifica a saida multi-AZ do laboratorio, mas e um recurso pago.
 - **HTTP intencional:** HTTPS e dominio ficaram fora do escopo atual do laboratorio.
 - **Infraestrutura efemera:** `terraform destroy` remove o runtime quando o estudo termina.
+- **Gates de ciclo de vida:** flags versionadas autorizam `apply` ou `destroy`, nunca os
+  dois na mesma execucao.

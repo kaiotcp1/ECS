@@ -39,6 +39,16 @@ Envie a alteracao para `main`. Depois do provisionamento e da validacao do endpo
 retorne o valor para `false` antes de novos pushes. Com `false`, a pipeline ainda
 executa CI, identidade e plan, mas nao cria recursos cobraveis.
 
+Para solicitar a destruicao automatica pelo workflow de governanca, use:
+
+```hcl
+provision_infrastructure = false
+destroy_infrastructure = true
+```
+
+Depois da conclusao, retorne `destroy_infrastructure` para `false`. Nunca mantenha as
+duas chaves em `true`; a pipeline falha antes de alterar recursos.
+
 ## Validar
 
 ```powershell

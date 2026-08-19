@@ -31,13 +31,40 @@ env:
   ALB_NAME: fargateflow-alb
 
 jobs:
-  deploy:
-    name: Deploy to Amazon ECS
+  read-lifecycle-gates:
+    name: Read lifecycle gates
     if: >-
       (github.event_name == 'workflow_run' &&
       github.event.workflow_run.conclusion == 'success') ||
       (github.event_name == 'workflow_dispatch' &&
       github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    outputs:
+      destroy_infrastructure: ${{ steps.gate.outputs.destroy_enabled }}
+
+    steps:
+      - name: Checkout validated commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Read destroy gate
+        id: gate
+        working-directory: infra
+        run: |
+          destroy_enabled="$(sed -nE 's/^destroy_infrastructure[[:space:]]*=[[:space:]]*(true|false)[[:space:]]*$/\1/p' environments/study.tfvars)"
+          test "$destroy_enabled" = "true" || test "$destroy_enabled" = "false"
+          echo "destroy_enabled=$destroy_enabled" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    name: Deploy to Amazon ECS
+    if: >-
+      ((github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success') ||
+      (github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main')) &&
+      needs.read-lifecycle-gates.outputs.destroy_infrastructure != 'true'
+    needs: read-lifecycle-gates
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: production

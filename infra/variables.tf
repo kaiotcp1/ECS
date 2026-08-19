@@ -44,3 +44,9 @@ variable "provision_infrastructure" {
   type        = bool
   default     = false
 }
+
+variable "destroy_infrastructure" {
+  description = "Chave de autorizacao para o workflow de destroy da pipeline. Nao deve ser usada para condicionar recursos Terraform."
+  type        = bool
+  default     = false
+}

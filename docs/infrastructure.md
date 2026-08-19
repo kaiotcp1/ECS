@@ -76,18 +76,24 @@ real que a justifique.
 O state de identidade e separado do state do runtime para que `terraform destroy` do
 laboratorio nao remova as credenciais necessarias para recria-lo.
 
-## Gate de provisionamento
+## Gates de ciclo de vida
 
-O arquivo `environments/study.tfvars` contem `provision_infrastructure`. A variavel e
-avaliada pela pipeline somente depois de `validate` e `plan`:
+O arquivo `environments/study.tfvars` contem `provision_infrastructure` e
+`destroy_infrastructure`. As variaveis sao avaliadas pela pipeline somente depois de
+`validate` e `plan`:
 
 ```text
 false -> nao executa apply; nenhum recurso cobravel e criado
 true  -> executa apply automatico do runtime
 ```
 
-Ela nao e usada em `count` ou `for_each`. Por isso, alterar para `false` nao pede a
-destruicao dos recursos existentes; apenas impede um novo apply automatico.
+Com `destroy_infrastructure=true`, o workflow encadeado `Destroy runtime` cria e aplica
+um plano `terraform plan -destroy` para o state `fargateflow/study`. O escopo
+`infra/identity`, o bucket compartilhado e o provedor OIDC ficam preservados. As duas
+chaves sao mutuamente exclusivas.
+
+Elas nao sao usadas em `count` ou `for_each`. Por isso, alterar para `false` nao pede
+a destruicao dos recursos existentes; apenas bloqueia a respectiva operacao automatica.
 
 ## State remoto compartilhado
 

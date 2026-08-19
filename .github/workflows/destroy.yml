@@ -1,0 +1,116 @@
+name: Destroy runtime
+
+on:
+  workflow_run:
+    workflows:
+      - Terraform
+    branches:
+      - main
+    types:
+      - completed
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fargateflow-runtime-${{ github.event.workflow_run.head_branch || github.ref }}
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  AWS_ACCOUNT_ID: '761018861028'
+  TERRAFORM_ROLE_ARN: arn:aws:iam::761018861028:role/fargateflow-terraform-role
+  TF_IN_AUTOMATION: 'true'
+
+jobs:
+  read-destroy-gate:
+    name: Read destroy gate
+    if: >-
+      (github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success') ||
+      (github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    outputs:
+      destroy_infrastructure: ${{ steps.gate.outputs.enabled }}
+
+    steps:
+      - name: Checkout validated commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Validate destroy gate
+        id: gate
+        working-directory: infra
+        run: |
+          provision_enabled="$(sed -nE 's/^provision_infrastructure[[:space:]]*=[[:space:]]*(true|false)[[:space:]]*$/\1/p' environments/study.tfvars)"
+          destroy_enabled="$(sed -nE 's/^destroy_infrastructure[[:space:]]*=[[:space:]]*(true|false)[[:space:]]*$/\1/p' environments/study.tfvars)"
+
+          test "$provision_enabled" = "true" || test "$provision_enabled" = "false"
+          test "$destroy_enabled" = "true" || test "$destroy_enabled" = "false"
+
+          if [[ "$provision_enabled" == "true" && "$destroy_enabled" == "true" ]]; then
+            echo "provision_infrastructure and destroy_infrastructure cannot both be true."
+            exit 1
+          fi
+
+          echo "enabled=$destroy_enabled" >> "$GITHUB_OUTPUT"
+
+          if [[ "$destroy_enabled" == "true" ]]; then
+            echo "Destroy gate is enabled."
+          else
+            echo "Destroy gate is disabled; runtime will be preserved."
+          fi
+
+  destroy:
+    name: Destroy Terraform runtime
+    if: needs.read-destroy-gate.outputs.destroy_infrastructure == 'true'
+    needs: read-destroy-gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout validated commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.15.8
+
+      - name: Configure Terraform AWS credentials
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          role-to-assume: ${{ env.TERRAFORM_ROLE_ARN }}
+          role-session-name: terraform-destroy-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: ${{ env.AWS_ACCOUNT_ID }}
+          role-duration-seconds: 3600
+          mask-aws-account-id: true
+
+      - name: Initialize remote backend
+        working-directory: infra
+        run: terraform init -input=false
+
+      - name: Create destroy plan
+        working-directory: infra
+        run: terraform plan -destroy -input=false -out=tfplan -var-file="environments/study.tfvars"
+
+      - name: Destroy runtime infrastructure
+        working-directory: infra
+        run: terraform apply -input=false tfplan
+
+      - name: Write destroy summary
+        run: |
+          {
+            echo "### Terraform runtime destroy"
+            echo
+            echo "The resources managed by fargateflow/study/terraform.tfstate were destroyed."
+            echo "The shared state bucket, GitHub OIDC provider, and application CI/CD roles were preserved."
+          } >> "$GITHUB_STEP_SUMMARY"

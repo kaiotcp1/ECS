@@ -13,6 +13,7 @@ sequenceDiagram
   participant CI as Workflow CI
   participant TF as Workflow Terraform
   participant Identity as FargateFlow identity
+  participant Destroy as Workflow Destroy runtime
   participant AWS as AWS via OIDC
   participant ECR as Amazon ECR
   participant ECS as Amazon ECS
@@ -33,6 +34,12 @@ sequenceDiagram
     TF->>TF: registra apply bloqueado
   end
   TF-->>GH: sucesso
+  GH->>Destroy: dispara workflow de governanca
+  alt destroy_infrastructure = true
+    Destroy->>AWS: terraform plan -destroy e apply
+  else destroy_infrastructure = false
+    Destroy->>Destroy: registra destroy bloqueado
+  end
   GH->>AWS: workflow CD assume fargateflow-deploy-role
   AWS-->>GH: credenciais temporarias
   GH->>ECR: build e push ARM64 por commit SHA
@@ -62,11 +69,20 @@ conta AWS. Depois de um CI bem-sucedido na `main`, executa tres estagios ordenad
 
 1. assume a role compartilhada por OIDC e aplica `infra/identity` de forma idempotente;
 2. assume `fargateflow-terraform-role` e gera o plan do runtime;
-3. consulta `provision_infrastructure` em `infra/environments/study.tfvars`.
+3. consulta `provision_infrastructure` e `destroy_infrastructure` em
+   `infra/environments/study.tfvars`.
 
 O valor padrao e `false`: o plan continua visivel, mas o job de apply e ignorado. Com
-`true`, a pipeline executa um novo plan e aplica o runtime. O workflow nunca executa
-`terraform destroy`; essa operacao continua explicita e manual.
+`true`, a pipeline executa um novo plan e aplica o runtime. As duas chaves nao podem
+estar em `true` ao mesmo tempo.
+
+## Destroy runtime
+
+Depois de Terraform, o workflow de governanca le `destroy_infrastructure`. Com a
+chave em `true`, assume `fargateflow-terraform-role`, cria um plano `-destroy` e aplica
+o plano do state do runtime. O state de identidade, o bucket compartilhado e o provedor
+OIDC nao pertencem a esse escopo. O CD le a mesma chave e e ignorado quando ha uma
+destruicao solicitada.
 
 ## CD
 

@@ -138,10 +138,12 @@ Terraform para evitar disputa de ownership entre as duas ferramentas.
 
 ### Provisionamento automatico com trava de custo
 
-O arquivo `infra/environments/study.tfvars` controla o ultimo job da pipeline:
+O arquivo `infra/environments/study.tfvars` controla os gates de ciclo de vida da
+pipeline:
 
 ```hcl
 provision_infrastructure = false
+destroy_infrastructure = false
 ```
 
 Com `false`, todo push na `main` executa CI, valida Terraform, garante as roles da
@@ -150,7 +152,12 @@ versione e envie o arquivo para liberar o apply automatico depois de todas as
 validacoes. Retorne a chave para `false` antes de novos pushes que nao devam recriar
 o laboratorio.
 
-Essa chave controla a pipeline, nao os recursos Terraform. Assim, mudar para `false`
+Com `destroy_infrastructure=true`, o workflow encadeado `Destroy runtime` cria um
+plano `-destroy` e remove somente os recursos do state `fargateflow/study`. As duas
+chaves nao podem ser `true` ao mesmo tempo. Retorne a chave de destroy para `false`
+no commit seguinte.
+
+As chaves controlam a pipeline, nao os recursos Terraform. Assim, mudar para `false`
 nunca gera um plano de destruicao acidental.
 
 ## Custos e remocao
