@@ -1,11 +1,11 @@
 locals {
   names = {
-    vpc                = "${var.name_prefix}-vpc"
-    main_route_table   = "${var.name_prefix}-main-rt"
-    internet_gateway   = "${var.name_prefix}-igw"
-    nat_gateway        = "${var.name_prefix}-nat-regional"
-    public_route_table = "${var.name_prefix}-public-rt"
-    alb_security_group = "${var.name_prefix}-alb-sg"
+    vpc                  = "${var.name_prefix}-vpc"
+    main_route_table     = "${var.name_prefix}-main-rt"
+    internet_gateway     = "${var.name_prefix}-igw"
+    nat_gateway          = "${var.name_prefix}-nat-regional"
+    public_route_table   = "${var.name_prefix}-public-rt"
+    alb_security_group   = "${var.name_prefix}-alb-sg"
     tasks_security_group = "${var.name_prefix}-ecs-tasks-sg"
     load_balancer        = "${var.name_prefix}-alb"
     target_group         = "${var.name_prefix}-tg"
