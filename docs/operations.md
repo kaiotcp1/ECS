@@ -85,6 +85,7 @@ aws logs tail /ecs/fargateflow --since 10m
 - trust policy das tasks limitada por conta e ARN de origem ECS;
 - imagens ECR imutaveis, criptografadas e analisadas no push;
 - deploy bloqueado para vulnerabilidades HIGH ou CRITICAL;
+- IaC validada por `tflint` e Trivy, com excecoes de risco justificadas e versionadas;
 - state S3 privado, versionado, criptografado e acessivel somente via TLS;
 - GitHub Actions sem access keys permanentes.
 

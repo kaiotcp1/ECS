@@ -75,6 +75,11 @@ O valor padrao e `false`: o plan continua visivel, mas o job de apply e ignorado
 `true`, a pipeline executa um novo plan e aplica o runtime. As duas chaves nao podem
 estar em `true` ao mesmo tempo.
 
+O Trivy falha para achados `HIGH` e `CRITICAL`. As excecoes estritamente necessarias
+ficam versionadas em `.trivyignore`: ALB publico, HTTP enquanto nao existe dominio e
+certificado, e egress das tarefas pelo NAT. Cada excecao e documentada para que nao
+mascare novos riscos.
+
 ## Destroy runtime
 
 Depois de Terraform, o workflow de governanca le `destroy_infrastructure`. Com a

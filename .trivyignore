@@ -1,0 +1,9 @@
+# O ALB e intencionalmente internet-facing para expor a API do laboratorio.
+AWS-0053
+
+# HTTPS depende de dominio e certificado ACM, fora do escopo atual do laboratorio.
+AWS-0054
+
+# As tarefas privadas precisam de saida HTTPS pelo NAT para ECR, CloudWatch e servicos externos.
+# VPC endpoints substituiriam esta excecao em um ambiente de producao.
+AWS-0104
