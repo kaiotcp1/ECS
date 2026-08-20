@@ -24,7 +24,7 @@ sequenceDiagram
   CI-->>GH: sucesso
   GH->>TF: dispara workflow Terraform
   TF->>AWS: assume role compartilhada por OIDC
-  TF->>TF: validate e plan
+  TF->>TF: fmt, validate, tflint, Trivy e plan
   alt provision_infrastructure = true
     TF->>AWS: terraform apply do runtime
   else provision_infrastructure = false
@@ -61,11 +61,14 @@ Uma falha impede o acionamento automatico do CD.
 
 ## Terraform
 
-Em pull requests, executa `fmt`, inicializacao sem backend e `validate`, sem acessar a
-conta AWS. Depois de um CI bem-sucedido na `main`:
+Em pull requests, executa `fmt`, inicializacao sem backend, `validate`, `tflint` e
+Trivy para configuracoes Terraform, sem acessar a conta AWS. Depois de um CI bem-
+sucedido na `main`:
 
 1. assume `github-actions-deploy-role` por OIDC e gera o plan do runtime;
-2. consulta `provision_infrastructure` e `destroy_infrastructure` em
+2. publica no job summary a contagem de recursos a criar, atualizar, remover ou
+   substituir, sem anexar o plan completo que pode conter valores sensiveis;
+3. consulta `provision_infrastructure` e `destroy_infrastructure` em
    `infra/locals.tf`.
 
 O valor padrao e `false`: o plan continua visivel, mas o job de apply e ignorado. Com

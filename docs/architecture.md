@@ -35,6 +35,7 @@ flowchart LR
     ecr[(Amazon ECR<br/>imagens imutaveis)]
     logs[(CloudWatch Logs<br/>retencao: 3 dias)]
     metrics[(CloudWatch<br/>dashboard + alarmes)]
+    scaling[Application Auto Scaling<br/>CPU/Memoria 80%]
   end
 
   user -->|HTTP :80| igw --> alb
@@ -51,6 +52,9 @@ flowchart LR
   alb -->|metricas de saude e 5XX| metrics
   taskA -->|CPU e memoria| metrics
   taskB -->|CPU e memoria| metrics
+  metrics -->|metricas ECS| scaling
+  scaling -. ajusta capacidade .-> taskA
+  scaling -. ajusta capacidade .-> taskB
 ```
 
 O ALB e o unico ponto de entrada publico. As tarefas recebem interfaces de rede nas
@@ -123,3 +127,5 @@ quando passa pelos health checks do container, do ECS e do load balancer.
   estabilizam ou que sustentam erros `5XX` nos targets do ALB.
 - **Observabilidade proporcional:** um dashboard CloudWatch concentra saude dos targets,
   erros `5XX`, CPU e memoria sem habilitar Container Insights.
+- **Escalabilidade preparada:** Application Auto Scaling monitora CPU e memoria com alvo
+  de 80%, entre zero e quatro tarefas, pronto para um futuro teste de carga.

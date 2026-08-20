@@ -14,6 +14,7 @@ conta e ficam fora deste state.
 | `ecr.tf`           | Artefatos de container | Repositorio, scan e lifecycle policy                    |
 | `iam.tf`           | Identidades de runtime | Task role e task execution role                         |
 | `ecs.tf`           | Computacao e rollback  | Cluster, task definition, service e rollback automatico |
+| `autoscaling.tf`   | Escalabilidade         | Target tracking de CPU e memoria para o service ECS     |
 | `observability.tf` | Sinais operacionais    | Alarmes CloudWatch, dashboard e rollback por `5XX`      |
 | `locals.tf`        | Convencoes locais      | Nomes compartilhados dos recursos do laboratorio        |
 | `providers.tf`     | Provider e tags        | AWS provider, identidade e AZs disponiveis              |
@@ -54,10 +55,22 @@ avaliam tres periodos consecutivos de um minuto:
 - `fargateflow-ecs-cpu-high`: CPU media de pelo menos 80%;
 - `fargateflow-ecs-memory-high`: memoria media de pelo menos 80%.
 
-Os dois ultimos alarmes sao sinais operacionais sem acao automatica. Isso permite
-investigar capacidade antes de introduzir autoscaling. O deployment circuit breaker ja
-protege contra tarefas que nao inicializam ou nao passam nos health checks; o alarme
-complementa essa protecao quando a nova versao responde, mas devolve erros ao trafego.
+Os dois ultimos alarmes sao sinais operacionais sem acao automatica. O deployment circuit
+breaker ja protege contra tarefas que nao inicializam ou nao passam nos health checks; o
+alarme complementa essa protecao quando a nova versao responde, mas devolve erros ao
+trafego.
+
+## Application Auto Scaling
+
+O service registra o target escalavel `ecs:service:DesiredCount` com minimo de zero e
+maximo de quatro tarefas. O minimo preserva o bootstrap com `desired_count = 0`, antes
+da primeira imagem ser publicada pelo CD. Duas policies de target tracking observam CPU
+e memoria medias, ambas com alvo de 80% e cooldown de 60 segundos.
+
+O scale-in esta desabilitado intencionalmente. Sem gerador de carga, isso evita que uma
+aplicacao recem-publicada seja reduzida por ociosidade; a configuracao ainda escala para
+cima se CPU ou memoria atingirem 80%. Em um ambiente com carga real, remova
+`disable_scale_in = true` para habilitar a reducao automatica de capacidade.
 
 ## Ownership entre Terraform e CD
 

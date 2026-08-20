@@ -117,7 +117,8 @@ Os principais recursos cobrados durante o laboratorio sao NAT Gateway, IPv4 publ
 Application Load Balancer e tarefas Fargate. ECR, CloudWatch e S3 tambem podem gerar
 custos proporcionais a armazenamento, requests e transferencia. Os tres alarmes
 CloudWatch adicionam um pequeno custo mensal enquanto a stack existir; o destroy os
-remove junto com o runtime.
+remove junto com o runtime. O autoscaling pode elevar o service de duas para ate quatro
+tarefas se houver CPU ou memoria suficiente para atingir o alvo de 80%.
 
 O NAT regional automatico pode criar enderecos conforme as AZs usadas. Por isso, a
 stack nao deve permanecer ativa sem necessidade.

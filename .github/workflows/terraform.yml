@@ -45,6 +45,11 @@ jobs:
         with:
           terraform_version: 1.15.8
 
+      - name: Setup TFLint
+        uses: terraform-linters/setup-tflint@6e1e0642c0289bd619021bf6b34e3c08ed1e005a # v6.3.0
+        with:
+          tflint_version: v0.59.1
+
       - name: Check formatting
         run: terraform fmt -check -recursive
 
@@ -55,6 +60,21 @@ jobs:
       - name: Validate configuration
         working-directory: infra
         run: terraform validate
+
+      - name: Initialize TFLint rules
+        run: tflint --init
+
+      - name: Lint Terraform
+        run: tflint --format compact
+
+      - name: Scan Terraform security configuration
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: config
+          scan-ref: infra
+          format: table
+          exit-code: '1'
+          severity: HIGH,CRITICAL
 
   plan:
     name: Plan Terraform
@@ -124,6 +144,7 @@ jobs:
         run: terraform init -input=false
 
       - name: Create execution plan
+        id: execution-plan
         working-directory: infra
         run: |
           set +e
@@ -140,6 +161,32 @@ jobs:
           else
             echo "Terraform state matches the configuration."
           fi
+
+      - name: Write plan summary
+        working-directory: infra
+        run: |
+          set -euo pipefail
+
+          terraform show -json tfplan > tfplan.json
+
+          created="$(jq '[.resource_changes[]? | select(.change.actions == ["create"])] | length' tfplan.json)"
+          updated="$(jq '[.resource_changes[]? | select(.change.actions == ["update"])] | length' tfplan.json)"
+          deleted="$(jq '[.resource_changes[]? | select(.change.actions == ["delete"])] | length' tfplan.json)"
+          replaced="$(jq '[.resource_changes[]? | select((.change.actions | index("create")) and (.change.actions | index("delete")))] | length' tfplan.json)"
+
+          {
+            echo "### Terraform plan"
+            echo
+            echo "| Acao | Recursos |"
+            echo "| --- | ---: |"
+            echo "| Criar | ${created} |"
+            echo "| Atualizar | ${updated} |"
+            echo "| Remover | ${deleted} |"
+            echo "| Substituir | ${replaced} |"
+            echo
+            echo "- provision_infrastructure: \`${{ steps.provisioning.outputs.enabled }}\`"
+            echo "- destroy_infrastructure: \`${{ steps.provisioning.outputs.destroy_enabled }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   apply:
     name: Apply Terraform runtime

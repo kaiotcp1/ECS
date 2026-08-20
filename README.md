@@ -27,6 +27,10 @@ O runtime inclui um dashboard CloudWatch para CPU, memoria, saude dos targets e 
 `5XX`. O ECS usa circuit breaker e esse sinal de erro do ALB para reverter deployments
 que nao estabilizam ou passam a falhar sob trafego.
 
+O service tambem esta preparado para escalar horizontalmente com CPU ou memoria medias
+de 80%. No laboratorio, as policies preservam as tarefas ja publicadas e escalam apenas
+para cima, entre zero e quatro tarefas, quando houver uma futura carga real.
+
 ```mermaid
 flowchart LR
   client([Cliente]) -->|HTTP :80| alb[Application Load Balancer]
@@ -138,6 +142,10 @@ vazio. Depois disso, o workflow `CD`:
 
 Alteracoes de `desired_count` e `task_definition` feitas pelo CD sao ignoradas pelo
 Terraform para evitar disputa de ownership entre as duas ferramentas.
+
+O workflow Terraform tambem executa `tflint` e Trivy contra as configuracoes de IaC.
+Na `main`, o resumo do plan apresenta somente as contagens de alteracoes, sem publicar
+o conteudo potencialmente sensivel do state.
 
 ### Provisionamento automatico com trava de custo
 
