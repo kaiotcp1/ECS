@@ -23,6 +23,10 @@ ARM64 executadas sem IP publico em duas zonas de disponibilidade. Imagens imutav
 ficam no ECR, logs estruturados seguem para o CloudWatch e o GitHub Actions acessa a
 AWS por OIDC, sem access keys permanentes.
 
+O runtime inclui um dashboard CloudWatch para CPU, memoria, saude dos targets e erros
+`5XX`. O ECS usa circuit breaker e esse sinal de erro do ALB para reverter deployments
+que nao estabilizam ou passam a falhar sob trafego.
+
 ```mermaid
 flowchart LR
   client([Cliente]) -->|HTTP :80| alb[Application Load Balancer]

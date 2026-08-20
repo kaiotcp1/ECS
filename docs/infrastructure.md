@@ -6,18 +6,19 @@ conta e ficam fora deste state.
 
 ## Inventario
 
-| Arquivo        | Responsabilidade       | Recursos principais                                    |
-| -------------- | ---------------------- | ------------------------------------------------------ |
-| `network.tf`   | Rede multi-AZ          | VPC, subnets, route tables, IGW e NAT Gateway regional |
-| `security.tf`  | Fronteiras de trafego  | Security groups e regras explicitas                    |
-| `alb.tf`       | Entrada HTTP           | ALB, listener, target group e health check             |
-| `ecr.tf`       | Artefatos de container | Repositorio, scan e lifecycle policy                   |
-| `iam.tf`       | Identidades de runtime | Task role e task execution role                        |
-| `ecs.tf`       | Computacao e logs      | Cluster, task definition, service e CloudWatch Logs    |
-| `locals.tf`    | Convencoes locais      | Nomes compartilhados dos recursos do laboratorio       |
-| `providers.tf` | Provider e tags        | AWS provider, identidade e AZs disponiveis             |
-| `versions.tf`  | Versoes e backend      | Terraform, AWS provider e state S3                     |
-| `iam/trust/`   | Trust de runtime       | Template JSON usado pelas roles de task do ECS         |
+| Arquivo            | Responsabilidade       | Recursos principais                                     |
+| ------------------ | ---------------------- | ------------------------------------------------------- |
+| `network.tf`       | Rede multi-AZ          | VPC, subnets, route tables, IGW e NAT Gateway regional  |
+| `security.tf`      | Fronteiras de trafego  | Security groups e regras explicitas                     |
+| `alb.tf`           | Entrada HTTP           | ALB, listener, target group e health check              |
+| `ecr.tf`           | Artefatos de container | Repositorio, scan e lifecycle policy                    |
+| `iam.tf`           | Identidades de runtime | Task role e task execution role                         |
+| `ecs.tf`           | Computacao e rollback  | Cluster, task definition, service e rollback automatico |
+| `observability.tf` | Sinais operacionais    | Alarmes CloudWatch, dashboard e rollback por `5XX`      |
+| `locals.tf`        | Convencoes locais      | Nomes compartilhados dos recursos do laboratorio        |
+| `providers.tf`     | Provider e tags        | AWS provider, identidade e AZs disponiveis              |
+| `versions.tf`      | Versoes e backend      | Terraform, AWS provider e state S3                      |
+| `iam/trust/`       | Trust de runtime       | Template JSON usado pelas roles de task do ECS          |
 
 ## Enderecamento
 
@@ -41,6 +42,22 @@ entre AZs e rollback automatico pelo deployment circuit breaker.
 O primeiro `terraform apply` usa `desired_count = 0`, pois a imagem real ainda nao
 existe. Depois que o ECR esta disponivel, o CD publica a imagem, registra uma nova
 revisao da task definition e escala o service para duas tarefas.
+
+## Observabilidade e recuperacao
+
+O CloudWatch dashboard `fargateflow-observability` exibe CPU e memoria do service ECS,
+quantidade de targets saudaveis ou indisponiveis e respostas `5XX` do ALB. Tres alarmes
+avaliam tres periodos consecutivos de um minuto:
+
+- `fargateflow-target-5xx`: cinco ou mais erros `5XX` da aplicacao; integrado ao ECS para
+  reverter a revisao em deployment;
+- `fargateflow-ecs-cpu-high`: CPU media de pelo menos 80%;
+- `fargateflow-ecs-memory-high`: memoria media de pelo menos 80%.
+
+Os dois ultimos alarmes sao sinais operacionais sem acao automatica. Isso permite
+investigar capacidade antes de introduzir autoscaling. O deployment circuit breaker ja
+protege contra tarefas que nao inicializam ou nao passam nos health checks; o alarme
+complementa essa protecao quando a nova versao responde, mas devolve erros ao trafego.
 
 ## Ownership entre Terraform e CD
 

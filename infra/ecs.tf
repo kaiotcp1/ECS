@@ -115,6 +115,12 @@ resource "aws_ecs_service" "app" {
     rollback = true
   }
 
+  alarms {
+    alarm_names = [aws_cloudwatch_metric_alarm.target_5xx.alarm_name]
+    enable      = true
+    rollback    = true
+  }
+
   network_configuration {
     subnets          = values(aws_subnet.private)[*].id
     security_groups  = [aws_security_group.ecs_tasks.id]

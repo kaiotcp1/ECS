@@ -19,5 +19,15 @@ locals {
     container            = "${var.name_prefix}-api"
     task_role            = "${var.name_prefix}-ecs-task-role"
     task_execution_role  = "${var.name_prefix}-ecs-task-execution-role"
+    dashboard            = "${var.name_prefix}-observability"
+    target_5xx_alarm     = "${var.name_prefix}-target-5xx"
+    cpu_alarm            = "${var.name_prefix}-ecs-cpu-high"
+    memory_alarm         = "${var.name_prefix}-ecs-memory-high"
+  }
+
+  observability = {
+    target_5xx_threshold = 5
+    cpu_threshold        = 80
+    memory_threshold     = 80
   }
 }

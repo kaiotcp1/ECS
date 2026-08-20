@@ -90,9 +90,12 @@ aws logs tail /ecs/fargateflow --since 10m
 
 ## Observabilidade e recuperacao
 
-Logs estruturados ficam em `/ecs/fargateflow` por tres dias. O deployment circuit
-breaker do ECS faz rollback quando uma nova revisao nao estabiliza. Health checks em
-camadas detectam falhas dentro do container e removem targets indisponiveis do ALB.
+Logs estruturados ficam em `/ecs/fargateflow` por tres dias. O dashboard
+`fargateflow-observability` consolida CPU, memoria, saude dos targets e erros `5XX`.
+O deployment circuit breaker do ECS faz rollback quando uma nova revisao nao estabiliza;
+o alarme `fargateflow-target-5xx` tambem aciona rollback quando a nova revisao sustenta
+cinco ou mais erros `5XX` por tres minutos. Health checks em camadas detectam falhas
+dentro do container e removem targets indisponiveis do ALB.
 
 Para investigar um deploy:
 
@@ -102,11 +105,19 @@ Para investigar um deploy:
 4. consulte os streams mais recentes no CloudWatch Logs;
 5. confira os findings do scan da imagem no ECR.
 
+Para abrir o dashboard pelo Terraform:
+
+```powershell
+terraform -chdir=infra output -raw observability_dashboard_url
+```
+
 ## Custos
 
 Os principais recursos cobrados durante o laboratorio sao NAT Gateway, IPv4 publico,
 Application Load Balancer e tarefas Fargate. ECR, CloudWatch e S3 tambem podem gerar
-custos proporcionais a armazenamento, requests e transferencia.
+custos proporcionais a armazenamento, requests e transferencia. Os tres alarmes
+CloudWatch adicionam um pequeno custo mensal enquanto a stack existir; o destroy os
+remove junto com o runtime.
 
 O NAT regional automatico pode criar enderecos conforme as AZs usadas. Por isso, a
 stack nao deve permanecer ativa sem necessidade.

@@ -17,3 +17,8 @@ output "ecs_service" {
   description = "Cluster e servico atualizados pelo workflow de CD."
   value       = "${aws_ecs_cluster.app.name}/${aws_ecs_service.app.name}"
 }
+
+output "observability_dashboard_url" {
+  description = "Dashboard CloudWatch com saude do ALB e utilizacao do servico ECS."
+  value       = "https://${var.aws_region}.console.aws.amazon.com/cloudwatch/home?region=${var.aws_region}#dashboards:name=${aws_cloudwatch_dashboard.app.dashboard_name}"
+}
